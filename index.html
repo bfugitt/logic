@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Logic Puzzles OS</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Tailwind CSS (via CDN for simplicity in one file) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        :root {
+            --bg-color: #888;
+            --window-bg: #ffffff;
+            --border-color: #000000;
+        }
+
+        body {
+            font-family: 'VT323', monospace;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 0;
+            height: 100dvh;
+            overflow: hidden;
+            background-image: 
+                linear-gradient(45deg, #aaa 25%, transparent 25%), 
+                linear-gradient(-45deg, #aaa 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #aaa 75%), 
+                linear-gradient(-45deg, transparent 75%, #aaa 75%);
+            background-size: 4px 4px;
+        }
+
+        /* Scrollbar styling for Retro Feel */
+        ::-webkit-scrollbar { width: 12px; }
+        ::-webkit-scrollbar-track { background: #fff; border-left: 1px solid #000; }
+        ::-webkit-scrollbar-thumb { background: #000; border: 2px solid #fff; }
+
+        .retro-window {
+            background: white;
+            border: 2px solid black;
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+            max-height: 100%;
+        }
+
+        .title-bar {
+            border-bottom: 2px solid black;
+            padding: 4px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            min-height: 32px;
+        }
+
+        .title-lines {
+            flex-grow: 1;
+            height: 12px;
+            margin: 0 10px;
+            background-image: repeating-linear-gradient(
+                to bottom,
+                #000,
+                #000 1px,
+                #fff 1px,
+                #fff 3px
+            );
+        }
+
+        .retro-btn {
+            border: 2px solid black;
+            background: white;
+            color: black;
+            cursor: pointer;
+            font-family: 'VT323', monospace;
+            font-size: 1.2rem;
+            padding: 4px 12px;
+            transition: all 0.1s;
+            box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+        }
+
+        .retro-btn:active {
+            background: black;
+            color: white;
+            transform: translate(1px, 1px);
+            box-shadow: none;
+        }
+
+        .retro-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Grid Utilities */
+        .cell-input {
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            border: none;
+            outline: none;
+            background: transparent;
+            font-family: 'VT323', monospace;
+            font-size: 1.5rem;
+            color: black;
+        }
+        
+        /* Logic Grid Specifics */
+        .logic-cell {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+        .logic-cell:hover { background: #eee; }
+
+        /* General Shake Animation */
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+            75% { transform: translateX(-5px); }
+            100% { transform: translateX(0); }
+        }
+        .shake { animation: shake 0.3s; }
+
+        /* Kakuro Diagonal Split */
+        .kakuro-clue {
+            background: #000;
+            color: #fff;
+            position: relative;
+            overflow: hidden;
+        }
+        .kakuro-clue svg line {
+            stroke: #fff;
+            stroke-width: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- PUZZLE DATA & GENERATORS ---
+
+        // 1. Sudoku (Simple 4x4 for demo, scalable logic)
+        // Standard 9x9 is big for mobile without zoom, let's do a 6x6 "Mini Sudoku" for students
+        const SUDOKU_DATA = {
+            initial: [
+                [0, 2, 0, 5, 0, 1],
+                [1, 0, 0, 0, 0, 2],
+                [0, 0, 0, 0, 4, 0],
+                [0, 5, 0, 0, 0, 0],
+                [2, 0, 0, 0, 0, 3],
+                [4, 0, 3, 0, 2, 0]
+            ],
+            solution: [
+                [3, 2, 6, 5, 4, 1],
+                [1, 4, 5, 3, 6, 2],
+                [5, 3, 2, 6, 4, 1], // Wait, generated manually, let's use a simpler check logic
+                // Actually for robustness, I will just validate rules rather than strict solution match
+            ]
+        };
+
+        // 2. KenKen (4x4)
+        const KENKEN_DATA = {
+            size: 4,
+            cages: [
+                { cells: [[0,0], [0,1]], target: 3, op: '+' },
+                { cells: [[0,2], [0,3]], target: 8, op: 'x' },
+                { cells: [[1,0], [2,0]], target: 2, op: '÷' },
+                { cells: [[1,1], [2,1]], target: 3, op: '-' },
+                { cells: [[1,2], [2,2]], target: 7, op: '+' },
+                { cells: [[1,3], [2,3]], target: 2, op: '-' },
+                { cells: [[3,0], [3,1]], target: 1, op: '-' },
+                { cells: [[3,2], [3,3]], target: 6, op: 'x' }
+            ]
+        };
+
+        // 3. Binary (6x6)
+        const BINARY_DATA = {
+            size: 6,
+            initial: [
+                [null, 1, null, null, 1, null],
+                [null, null, null, 1, null, 1],
+                [1, null, null, null, null, null],
+                [null, 1, 1, null, null, 1],
+                [null, null, null, 1, null, null],
+                [null, null, 1, null, null, null]
+            ]
+        };
+
+        // 4. Logic Grid
+        const LOGIC_DATA = {
+            categories: ["Name", "Subject", "Fruit"],
+            items: [
+                ["Alice", "Bob", "Charlie"],
+                ["Math", "Art", "Science"],
+                ["Apple", "Banana", "Cherry"]
+            ],
+            clues: [
+                "1. Alice hates numbers and science.",
+                "2. The person who likes Art eats Bananas.",
+                "3. Charlie brought a Cherry.",
+                "4. Bob does not like Math."
+            ],
+            // Solution for validation: Alice=Art=Banana? No, clue 2 says Art=Banana.
+            // Clue 1: Alice != Math, Alice != Science. So Alice = Art.
+            // Clue 2: Art(Alice) = Banana. So Alice = Banana.
+            // Clue 3: Charlie = Cherry.
+            // Clue 4: Bob != Math. Bob isn't Art (Alice is). So Bob = Science.
+            // Therefore: Charlie = Math.
+            // Final: Alice(Art, Banana), Bob(Science, Apple), Charlie(Math, Cherry).
+            solution: {
+                "Alice-Art": true, "Alice-Science": false, "Alice-Math": false,
+                "Bob-Art": false, "Bob-Science": true, "Bob-Math": false,
+                "Charlie-Art": false, "Charlie-Science": false, "Charlie-Math": true,
+                "Alice-Banana": true, "Alice-Apple": false, "Alice-Cherry": false,
+                "Bob-Banana": false, "Bob-Apple": true, "Bob-Cherry": false,
+                "Charlie-Banana": false, "Charlie-Apple": false, "Charlie-Cherry": true,
+                "Math-Apple": false, "Math-Banana": false, "Math-Cherry": true,
+                "Art-Apple": false, "Art-Banana": true, "Art-Cherry": false,
+                "Science-Apple": true, "Science-Banana": false, "Science-Cherry": false
+            }
+        };
+
+        // 5. Kakuro (Small 4x4ish)
+        const KAKURO_DATA = {
+            grid: [
+                [{t:'b'}, {t:'c', d:4}, {t:'c', d:16}, {t:'b'}],
+                [{t:'c', r:4}, {t:'i'}, {t:'i'}, {t:'c', d:3}],
+                [{t:'c', r:6}, {t:'i'}, {t:'i'}, {t:'i'}],
+                [{t:'b'}, {t:'c', r:4}, {t:'i'}, {t:'i'}]
+            ],
+            // i=input, c=clue (d=down, r=right), b=black
+            // Solution:
+            // Row 1 (4): 1, 3.
+            // Row 2 (6): 3, 2, 1. (Wait, 3+2+1=6). 
+            // Col 1 (4): 1, 3.
+            // Col 2 (16): 3, ? ... let's verify logic.
+            // Let's use a simpler known puzzle.
+            //      \ 4 \ 3
+            // 3 \  1   2
+            // 4 \  3   1
+            // Simple 2x2 playable area
+             rows: 2, cols: 2,
+             map: [
+                 {x:0, y:0, type:'b'}, {x:1, y:0, type:'c', d:4}, {x:2, y:0, type:'c', d:3},
+                 {x:0, y:1, type:'c', r:3}, {x:1, y:1, type:'i', v:1}, {x:2, y:1, type:'i', v:2},
+                 {x:0, y:2, type:'c', r:4}, {x:1, y:2, type:'i', v:3}, {x:2, y:2, type:'i', v:1}
+             ]
+        };
+
+        // 6. Cryptography
+        const CRYPTO_DATA = {
+            quote: "LEARNING IS FUN",
+            cipher: {'L':'X', 'E':'Q', 'A':'W', 'R':'T', 'N':'P', 'I':'J', 'G':'M', 'S':'K', 'F':'Z', 'U':'V'}
+            // Ciphertext: XQWTPJPM JK ZVP
+        };
+
+        // 7. Drop Quotes
+        const DROP_DATA = {
+            quote: ["TIME", "FLIES"],
+            columns: [
+                ['T','F'], ['I','L'], ['M','I'], ['E','E', 'S'] // S is extra? no Time Flies is 4, 5.
+            ]
+            // Simplified: "KEEP CALM"
+            // K E E P
+            // C A L M
+            // Cols: [C,K], [E,A], [E,L], [P,M]
+        };
+
+
+        // --- COMPONENTS ---
+
+        const Icon = ({ name, label, onClick }) => (
+            <div onClick={onClick} className="flex flex-col items-center justify-center p-4 cursor-pointer hover:bg-black/10 rounded w-24">
+                <div className="w-12 h-12 border-2 border-black bg-white flex items-center justify-center mb-1 shadow-[2px_2px_0px_rgba(0,0,0,0.2)]">
+                     {/* Dynamic Icon based on name */}
+                     {name === 'sudoku' && <div className="grid grid-cols-2 gap-px bg-black w-8 h-8 border border-black"><div className="bg-white"></div><div className="bg-white"></div><div className="bg-white"></div><div className="bg-white"></div></div>}
+                     {name === 'kenken' && <div className="font-bold text-xl">4÷</div>}
+                     {name === 'binary' && <div className="font-bold text-xl">10</div>}
+                     {name === 'logic' && <div className="grid grid-cols-3 gap-0.5 w-8 h-8"><div className="bg-black/20"></div><div className="bg-black"></div><div className="bg-black/20"></div><div className="bg-black/20"></div><div className="bg-black/20"></div><div className="bg-black"></div></div>}
+                     {name === 'kakuro' && <div className="relative w-8 h-8 border border-black"><div className="absolute top-0 left-0 w-full h-full border-b border-black transform rotate-45 origin-top-left"></div></div>}
+                     {name === 'crypto' && <div className="font-bold text-xl">A?</div>}
+                     {name === 'drop' && <div className="flex flex-col items-center"><div className="w-8 h-1 bg-black mb-1"></div><div className="w-1 h-4 bg-black"></div></div>}
+                </div>
+                <span className="bg-white px-1 text-sm border border-transparent rounded">{label}</span>
+            </div>
+        );
+
+        const Window = ({ title, onClose, children, width = "w-full max-w-2xl" }) => (
+            <div className={`fixed inset-0 flex items-center justify-center p-2 z-50`} style={{background: 'rgba(0,0,0,0.2)'}}>
+                <div className={`retro-window ${width} h-full max-h-[90vh] flex flex-col`}>
+                    <div className="title-bar">
+                        <div className="w-4 h-4 border border-black bg-white" onClick={onClose}></div>
+                        <div className="title-lines"></div>
+                        <span className="font-bold uppercase tracking-widest">{title}</span>
+                        <div className="title-lines"></div>
+                        <div className="w-4 h-4"></div>
+                    </div>
+                    <div className="flex-grow overflow-auto p-4 bg-white relative">
+                        {children}
+                    </div>
+                </div>
+            </div>
+        );
+
+        const Numpad = ({ onInput, showClear = true }) => (
+            <div className="grid grid-cols-3 gap-2 mt-4 max-w-[200px] mx-auto">
+                {[1,2,3,4,5,6,7,8,9].map(n => (
+                    <button key={n} onClick={() => onInput(n)} className="retro-btn h-10">{n}</button>
+                ))}
+                {showClear && <button onClick={() => onInput(null)} className="retro-btn col-span-3">Clear</button>}
+            </div>
+        );
+
+        // --- APP IMPLEMENTATIONS ---
+
+        const SudokuApp = () => {
+            const [grid, setGrid] = useState(SUDOKU_DATA.initial.map(row => [...row]));
+            const [selected, setSelected] = useState([0, 0]);
+            
+            const handleInput = (val) => {
+                if (SUDOKU_DATA.initial[selected[0]][selected[1]] !== 0) return; // Locked cell
+                const newGrid = [...grid];
+                newGrid[selected[0]][selected[1]] = val || 0;
+                setGrid(newGrid);
+            };
+
+            const checkWin = () => {
+                // Simplified validation: Check no duplicates in rows/cols
+                let valid = true;
+                // Check rows
+                for(let r=0; r<6; r++) {
+                    let seen = new Set();
+                    for(let c=0; c<6; c++) {
+                        let val = grid[r][c];
+                        if(val === 0 || seen.has(val)) valid = false;
+                        seen.add(val);
+                    }
+                }
+                // Check cols
+                for(let c=0; c<6; c++) {
+                    let seen = new Set();
+                    for(let r=0; r<6; r++) {
+                        let val = grid[r][c];
+                        if(val === 0 || seen.has(val)) valid = false;
+                        seen.add(val);
+                    }
+                }
+                
+                alert(valid ? "Correct!" : "Incorrect. Keep trying.");
+            };
+
+            return (
+                <div className="flex flex-col items-center h-full">
+                    <div className="grid grid-cols-6 gap-0 border-2 border-black mb-4">
+                        {grid.map((row, r) => row.map((cell, c) => {
+                            const isLocked = SUDOKU_DATA.initial[r][c] !== 0;
+                            const isSelected = selected[0] === r && selected[1] === c;
+                            // Borders for 2x3 blocks
+                            const borderR = (c+1)%3 === 0 && c!==5 ? "border-r-2 border-black" : "border-r border-gray-400";
+                            const borderB = (r+1)%2 === 0 && r!==5 ? "border-b-2 border-black" : "border-b border-gray-400";
+                            
+                            return (
+                                <div key={`${r}-${c}`} 
+                                     onClick={() => setSelected([r,c])}
+                                     className={`w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center cursor-pointer text-xl
+                                         ${borderR} ${borderB}
+                                         ${isSelected ? 'bg-black text-white' : (isLocked ? 'bg-gray-200 font-bold' : 'bg-white')}
+                                     `}>
+                                    {cell !== 0 ? cell : ''}
+                                </div>
+                            );
+                        }))}
+                    </div>
+                    <div className="flex gap-2">
+                        <button className="retro-btn" onClick={checkWin}>Check</button>
+                    </div>
+                    <Numpad onInput={handleInput} />
+                </div>
+            );
+        };
+
+        const KenKenApp = () => {
+            const [grid, setGrid] = useState(Array(4).fill().map(() => Array(4).fill(0)));
+            const [selected, setSelected] = useState([0,0]);
+
+            const getCage = (r, c) => KENKEN_DATA.cages.find(cage => cage.cells.some(([cr, cc]) => cr === r && cc === c));
+
+            const handleInput = (val) => {
+                const newGrid = [...grid];
+                newGrid[selected[0]] = [...newGrid[selected[0]]];
+                newGrid[selected[0]][selected[1]] = val || 0;
+                setGrid(newGrid);
+            };
+            
+            // Validation Logic
+            const checkWin = () => {
+                 let valid = true;
+                 // 1. Check Row/Col Uniqueness
+                 for(let i=0; i<4; i++){
+                     let rowS = new Set(), colS = new Set();
+                     for(let j=0; j<4; j++){
+                         if(grid[i][j]===0 || rowS.has(grid[i][j])) valid=false;
+                         if(grid[j][i]===0 || colS.has(grid[j][i])) valid=false;
+                         rowS.add(grid[i][j]); colS.add(grid[j][i]);
+                     }
+                 }
+                 // 2. Check Cages
+                 KENKEN_DATA.cages.forEach(cage => {
+                     const values = cage.cells.map(([r,c]) => grid[r][c]);
+                     values.sort((a,b)=>b-a); // Desc for subtraction/division
+                     let result = 0;
+                     if (cage.op === '+') result = values.reduce((a,b)=>a+b, 0);
+                     else if (cage.op === 'x') result = values.reduce((a,b)=>a*b, 1);
+                     else if (cage.op === '-') result = values[0] - values[1];
+                     else if (cage.op === '÷') result = values[0] / values[1];
+                     
+                     if (result !== cage.target) valid = false;
+                 });
+
+                 alert(valid ? "Correct!" : "Something is wrong.");
+            };
+
+            return (
+                <div className="flex flex-col items-center h-full">
+                    <div className="relative border-2 border-black grid grid-cols-4 gap-0 mb-4 select-none">
+                         {/* Grid Rendering */}
+                         {grid.map((row, r) => row.map((cell, c) => {
+                             const cage = getCage(r,c);
+                             // Determine borders based on cage adjacency
+                             // Simple hack: Draw thick borders if neighbor not in same cage
+                             const isTop = r===0 || !getCage(r-1, c) || getCage(r-1,c) !== cage;
+                             const isLeft = c===0 || !getCage(r, c-1) || getCage(r,c-1) !== cage;
+                             const isSelected = selected[0]===r && selected[1]===c;
+
+                             // Show clue if top-left of cage
+                             const showClue = cage.cells[0][0] === r && cage.cells[0][1] === c;
+
+                             return (
+                                 <div key={`${r}-${c}`} 
+                                      onClick={() => setSelected([r,c])}
+                                      className={`w-12 h-12 flex items-center justify-center relative cursor-pointer
+                                        border border-gray-300
+                                        ${isTop ? 'border-t-2 border-t-black' : ''}
+                                        ${isLeft ? 'border-l-2 border-l-black' : ''}
+                                        ${isSelected ? 'bg-black text-white' : 'bg-white text-black'}
+                                      `}
+                                 >
+                                     {showClue && <span className={`absolute top-0 left-0 text-[10px] leading-3 p-0.5 ${isSelected?'text-white':'text-black'}`}>{cage.target}{cage.op}</span>}
+                                     <span className="text-xl">{cell || ''}</span>
+                                 </div>
+                             )
+                         }))}
+                    </div>
+                    <button className="retro-btn mb-2" onClick={checkWin}>Check</button>
+                    <Numpad onInput={handleInput} />
+                </div>
+            )
+        };
+
+        const BinaryApp = () => {
+            const [grid, setGrid] = useState(JSON.parse(JSON.stringify(BINARY_DATA.initial)));
+
+            const toggleCell = (r, c) => {
+                if (BINARY_DATA.initial[r][c] !== null) return; // Locked
+                const newGrid = [...grid];
+                const val = newGrid[r][c];
+                newGrid[r][c] = val === null ? 0 : (val === 0 ? 1 : null);
+                setGrid(newGrid);
+            }
+
+            const checkWin = () => {
+                let valid = true;
+                // Check rows/cols for: Max 2 same consec, Equal 0s and 1s
+                for(let i=0; i<6; i++) {
+                    let r0=0, r1=0, c0=0, c1=0;
+                    for(let j=0; j<6; j++) {
+                        // Row counts
+                        if(grid[i][j]===0) r0++; else if(grid[i][j]===1) r1++; else valid=false;
+                        // Col counts
+                        if(grid[j][i]===0) c0++; else if(grid[j][i]===1) c1++; else valid=false;
+
+                        // Consec Rows
+                        if(j>1 && grid[i][j]!==null && grid[i][j] === grid[i][j-1] && grid[i][j] === grid[i][j-2]) valid=false;
+                        // Consec Cols
+                        if(j>1 && grid[j][i]!==null && grid[j][i] === grid[j-1][i] && grid[j][i] === grid[j-2][i]) valid=false;
+                    }
+                    if(r0!==3 || r1!==3 || c0!==3 || c1!==3) valid = false;
+                }
+                alert(valid ? "Correct!" : "Rules violated.");
+            }
+
+            return (
+                <div className="flex flex-col items-center h-full">
+                    <p className="mb-2 text-sm text-center">Rules: No more than two 0s or 1s next to each other. Equal 0s and 1s in each row/col.</p>
+                    <div className="grid grid-cols-6 border-2 border-black gap-px bg-black">
+                        {grid.map((row, r) => row.map((cell, c) => {
+                            const isLocked = BINARY_DATA.initial[r][c] !== null;
+                            return (
+                                <div key={`${r}-${c}`} 
+                                     onClick={() => toggleCell(r,c)}
+                                     className={`w-10 h-10 bg-white flex items-center justify-center cursor-pointer select-none text-2xl
+                                        ${isLocked ? 'text-black font-bold' : 'text-blue-600'}
+                                     `}>
+                                    {cell === 0 ? '0' : (cell === 1 ? '1' : '')}
+                                </div>
+                            )
+                        }))}
+                    </div>
+                    <button className="retro-btn mt-4" onClick={checkWin}>Check</button>
+                </div>
+            )
+        };
+
+        const LogicGridApp = () => {
+            // State is a map "CategoryItem-CategoryItem": value (null, true(O), false(X))
+            // We only need to store the relationship grid.
+            // Simplified: 3 categories.
+            // Grid 1: Cat1 vs Cat2. Grid 2: Cat1 vs Cat3. Grid 3: Cat2 vs Cat3.
+            
+            const [state, setState] = useState({});
+
+            const toggle = (k) => {
+                const curr = state[k];
+                const next = curr === true ? false : (curr === false ? null : true); // Cycle null -> O -> X -> null
+                setState({...state, [k]: next});
+            };
+
+            const check = () => {
+                let errors = 0;
+                Object.keys(LOGIC_DATA.solution).forEach(key => {
+                    const userVal = state[key];
+                    // If user put O (true) where it should be O, good.
+                    // If user put X (false) where it should be X, good.
+                    // If user put nothing, neutral? Or incomplete. Let's strict check only explicit errors.
+                    if (userVal !== undefined && userVal !== null) {
+                        if (userVal !== LOGIC_DATA.solution[key]) errors++;
+                    }
+                });
+                alert(errors === 0 ? "So far so good!" : "Found errors.");
+            };
+
+            // Generate Grid Headers
+            const cats = LOGIC_DATA.categories;
+            const items = LOGIC_DATA.items;
+
+            return (
+                <div className="flex flex-col h-full">
+                    <div className="flex-grow overflow-auto">
+                        <div className="mb-4 p-2 bg-gray-100 border border-black text-sm">
+                            <strong>Clues:</strong>
+                            <ul className="list-none pl-0">
+                                {LOGIC_DATA.clues.map((c,i)=><li key={i}>{c}</li>)}
+                            </ul>
+                        </div>
+                        
+                        <div className="overflow-x-auto">
+                            <table className="border-collapse border border-black mx-auto">
+                                <thead>
+                                    <tr>
+                                        <th className="border border-black p-1 bg-gray-200"></th>
+                                        {items[1].map(i => <th key={i} className="border border-black p-1 vertical-text font-normal text-sm w-8">{i}</th>)}
+                                        {items[2].map(i => <th key={i} className="border border-black p-1 vertical-text font-normal text-sm w-8">{i}</th>)}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {/* Cat 1 rows */}
+                                    {items[0].map((item1, i) => (
+                                        <tr key={item1}>
+                                            <td className="border border-black p-1 text-right text-sm font-bold pr-2">{item1}</td>
+                                            {/* Cat 1 vs Cat 2 */}
+                                            {items[1].map(item2 => {
+                                                const k = `${item1}-${item2}`;
+                                                return (
+                                                    <td key={k} onClick={()=>toggle(k)} className="border border-black w-8 h-8 text-center cursor-pointer hover:bg-gray-200 select-none">
+                                                        {state[k]===true?'O':(state[k]===false?'X':'')}
+                                                    </td>
+                                                )
+                                            })}
+                                            {/* Cat 1 vs Cat 3 */}
+                                            {items[2].map(item3 => {
+                                                const k = `${item1}-${item3}`;
+                                                return (
+                                                    <td key={k} onClick={()=>toggle(k)} className="border border-black w-8 h-8 text-center cursor-pointer hover:bg-gray-200 select-none">
+                                                        {state[k]===true?'O':(state[k]===false?'X':'')}
+                                                    </td>
+                                                )
+                                            })}
+                                        </tr>
+                                    ))}
+                                    {/* Cat 2 vs Cat 3 rows */}
+                                    {items[1].map((item2, i) => (
+                                        <tr key={item2}>
+                                            <td className="border border-black p-1 text-right text-sm font-bold pr-2">{item2}</td>
+                                            {/* Empty spacer for Cat 1 columns */}
+                                            <td colSpan={3} className="bg-black"></td>
+                                            {items[2].map(item3 => {
+                                                const k = `${item2}-${item3}`; // Ensure key consistency? Actually Logic Data implies relationships are transitive. 
+                                                // For this demo, we treat the grid visually. Keys might need sorting alphabetically to be unique if used strictly.
+                                                // But usually standard logic grids just use the pair.
+                                                return (
+                                                    <td key={k} onClick={()=>toggle(k)} className="border border-black w-8 h-8 text-center cursor-pointer hover:bg-gray-200 select-none">
+                                                        {state[k]===true?'O':(state[k]===false?'X':'')}
+                                                    </td>
+                                                )
+                                            })}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div className="mt-2 text-center">
+                        <button className="retro-btn" onClick={check}>Check Logic</button>
+                    </div>
+                </div>
+            )
+        };
+
+        const KakuroApp = () => {
+             // 3x3 playable grid for demo
+             const map = KAKURO_DATA.map;
+             const [inputs, setInputs] = useState({});
+             const [selected, setSelected] = useState(null);
+
+             const handleInput = (n) => {
+                 if (!selected) return;
+                 setInputs({...inputs, [selected]: n});
+             };
+
+             const check = () => {
+                 // Hardcoded check for the demo map
+                 // 1,1=1; 1,2=2; 2,1=3; 2,2=1
+                 const ans = {'1-1':1, '2-1':2, '1-2':3, '2-2':1};
+                 let correct = true;
+                 Object.keys(ans).forEach(k => {
+                     if (inputs[k] !== ans[k]) correct = false;
+                 });
+                 alert(correct ? "Correct!" : "Math doesn't add up.");
+             }
+
+             return (
+                 <div className="flex flex-col items-center h-full">
+                     <div className="grid grid-cols-3 gap-0 border-2 border-black bg-black">
+                         {[0,1,2].map(y => [0,1,2].map(x => {
+                             const cell = map.find(c => c.x===x && c.y===y);
+                             const k = `${x}-${y}`;
+                             if (cell.type === 'b') return <div key={k} className="w-12 h-12 bg-black"></div>;
+                             if (cell.type === 'c') return (
+                                 <div key={k} className="w-12 h-12 bg-black relative border border-white/20">
+                                     <div className="absolute inset-0 border-b border-white transform -rotate-45 origin-bottom-left scale-150"></div>
+                                     {cell.d && <span className="absolute bottom-1 left-1 text-white text-xs z-10">{cell.d}</span>}
+                                     {cell.r && <span className="absolute top-1 right-1 text-white text-xs z-10">{cell.r}</span>}
+                                 </div>
+                             );
+                             // Input
+                             return (
+                                 <div key={k} 
+                                      onClick={() => setSelected(k)}
+                                      className={`w-12 h-12 bg-white flex items-center justify-center text-xl cursor-pointer
+                                         ${selected===k ? 'bg-blue-200' : ''} border border-gray-400`}
+                                 >
+                                     {inputs[k] || ''}
+                                 </div>
+                             )
+                         }))}
+                     </div>
+                     <button className="retro-btn mt-4" onClick={check}>Check</button>
+                     <Numpad onInput={handleInput} />
+                 </div>
+             )
+        };
+
+        const CryptoApp = () => {
+            const ciphertext = "XQWTPJPM JK ZVP"; // LEARNING IS FUN
+            const [mapping, setMapping] = useState({});
+            const [selectedChar, setSelectedChar] = useState(null);
+
+            const alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('');
+
+            const handleKey = (char) => {
+                if (selectedChar) {
+                    setMapping({...mapping, [selectedChar]: char});
+                    setSelectedChar(null);
+                }
+            };
+
+            return (
+                <div className="flex flex-col items-center h-full">
+                    <p className="text-center mb-4">Decode the message.</p>
+                    <div className="flex flex-wrap justify-center gap-2 mb-6">
+                        {ciphertext.split('').map((char, i) => {
+                            if (char === ' ') return <div key={i} className="w-6"></div>;
+                            const decoded = mapping[char] || '';
+                            return (
+                                <div key={i} className="flex flex-col items-center cursor-pointer" onClick={() => setSelectedChar(char)}>
+                                    <div className={`w-8 h-8 border-b-2 border-black text-center text-xl ${selectedChar===char ? 'bg-black text-white':''}`}>
+                                        {decoded}
+                                    </div>
+                                    <div className="text-sm font-bold mt-1">{char}</div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                    
+                    <div className="border-t-2 border-black w-full p-2">
+                        <p className="text-sm mb-2 text-center">Select a letter above, then pick its match below:</p>
+                        <div className="flex flex-wrap justify-center gap-1">
+                            {alpha.map(l => (
+                                <button key={l} onClick={() => handleKey(l)} className="retro-btn w-8 h-8 p-0 text-lg flex items-center justify-center">
+                                    {l}
+                                </button>
+                            ))}
+                        </div>
+                        <button className="retro-btn w-full mt-4" onClick={() => setMapping({})}>Reset</button>
+                    </div>
+                </div>
+            )
+        };
+
+        const DropQuoteApp = () => {
+            const phrase = "KEEP CALM";
+            // Columns:
+            // 0: [C, K]
+            // 1: [A, E]
+            // 2: [E, L]
+            // 3: [M, P]
+            // 4: [Space]
+            // Hardcoded columns for simplicity
+            const cols = [
+                {id: 0, chars: ['C','K']},
+                {id: 1, chars: ['A','E']},
+                {id: 2, chars: ['E','L']},
+                {id: 3, chars: ['M','P']}
+            ];
+            
+            const [grid, setGrid] = useState([
+                [null, null, null, null], // KEEP
+                [null, null, null, null]  // CALM
+            ]);
+            
+            const [selectedSource, setSelectedSource] = useState(null); // {colIdx, charIdx, char}
+
+            const handleSourceClick = (cIdx, charIdx, char) => {
+                // If this char is already used, don't pick it
+                // Simple logic: just select text
+                setSelectedSource({cIdx, charIdx, char});
+            };
+
+            const handleDestClick = (row, col) => {
+                if (selectedSource && selectedSource.cIdx === col) {
+                    const newGrid = [...grid];
+                    newGrid[row][col] = selectedSource.char;
+                    setGrid(newGrid);
+                    setSelectedSource(null);
+                }
+            };
+
+            const check = () => {
+                const w1 = grid[0].join('');
+                const w2 = grid[1].join('');
+                if (w1 === 'KEEP' && w2 === 'CALM') alert("Correct!");
+                else alert("Not quite.");
+            }
+
+            return (
+                <div className="flex flex-col items-center h-full">
+                    <p className="mb-4 text-sm">Drop letters into the correct rows.</p>
+                    
+                    {/* Source Letters */}
+                    <div className="flex gap-2 mb-4">
+                        {cols.map((col, cIdx) => (
+                            <div key={cIdx} className="flex flex-col gap-1 w-10">
+                                {col.chars.map((char, charIdx) => {
+                                    // Check if used
+                                    const used = grid.some(r => r[cIdx] === char);
+                                    const isSel = selectedSource?.cIdx === cIdx && selectedSource?.charIdx === charIdx;
+                                    return (
+                                        <div key={charIdx} 
+                                             onClick={() => !used && handleSourceClick(cIdx, charIdx, char)}
+                                             className={`w-10 h-10 border border-black flex items-center justify-center cursor-pointer text-xl
+                                                ${used ? 'opacity-20' : 'bg-white'}
+                                                ${isSel ? 'bg-black text-white' : ''}
+                                             `}>
+                                            {char}
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Destination Grid */}
+                    <div className="flex flex-col gap-1 border-t-2 border-black pt-4">
+                         {grid.map((row, rIdx) => (
+                             <div key={rIdx} className="flex gap-2">
+                                 {row.map((cell, cIdx) => (
+                                     <div key={cIdx} 
+                                          onClick={() => handleDestClick(rIdx, cIdx)}
+                                          className="w-10 h-10 border-2 border-black bg-white flex items-center justify-center text-xl cursor-pointer hover:bg-gray-100">
+                                         {cell || ''}
+                                     </div>
+                                 ))}
+                             </div>
+                         ))}
+                    </div>
+
+                    <button className="retro-btn mt-6" onClick={check}>Check</button>
+                </div>
+            )
+        }
+
+        // --- MAIN APP SHELL ---
+
+        const App = () => {
+            const [activeApp, setActiveApp] = useState(null);
+
+            return (
+                <div className="w-full h-full relative">
+                    
+                    {/* Menu Bar */}
+                    <div className="absolute top-0 w-full h-8 bg-white border-b-2 border-black flex items-center px-2 z-10 shadow-sm">
+                        <div className="font-bold mr-4"></div>
+                        <div className="font-bold mr-4">File</div>
+                        <div className="font-bold mr-4">Edit</div>
+                        <div className="font-bold mr-4">Special</div>
+                    </div>
+
+                    {/* Desktop Icons */}
+                    <div className="pt-12 p-4 flex flex-wrap content-start gap-4 h-full">
+                        <Icon name="sudoku" label="Sudoku" onClick={() => setActiveApp('sudoku')} />
+                        <Icon name="kenken" label="KenKen" onClick={() => setActiveApp('kenken')} />
+                        <Icon name="binary" label="Binary" onClick={() => setActiveApp('binary')} />
+                        <Icon name="logic" label="Logic Grid" onClick={() => setActiveApp('logic')} />
+                        <Icon name="kakuro" label="Kakuro" onClick={() => setActiveApp('kakuro')} />
+                        <Icon name="crypto" label="Crypto" onClick={() => setActiveApp('crypto')} />
+                        <Icon name="drop" label="DropQuote" onClick={() => setActiveApp('drop')} />
+                    </div>
+
+                    {/* Active Window */}
+                    {activeApp === 'sudoku' && <Window title="Sudoku" onClose={() => setActiveApp(null)}><SudokuApp /></Window>}
+                    {activeApp === 'kenken' && <Window title="KenKen" onClose={() => setActiveApp(null)}><KenKenApp /></Window>}
+                    {activeApp === 'binary' && <Window title="Binary Puzzle" onClose={() => setActiveApp(null)}><BinaryApp /></Window>}
+                    {activeApp === 'logic' && <Window title="Logic Grid" width="w-full max-w-4xl" onClose={() => setActiveApp(null)}><LogicGridApp /></Window>}
+                    {activeApp === 'kakuro' && <Window title="Kakuro" onClose={() => setActiveApp(null)}><KakuroApp /></Window>}
+                    {activeApp === 'crypto' && <Window title="Cryptography" onClose={() => setActiveApp(null)}><CryptoApp /></Window>}
+                    {activeApp === 'drop' && <Window title="Drop Quote" onClose={() => setActiveApp(null)}><DropQuoteApp /></Window>}
+                    
+                    {/* Footer / Copyright */}
+                    <div className="absolute bottom-2 right-2 text-xs bg-white/80 p-1 border border-black">
+                        Classroom Logic OS v1.0
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
