@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Logic Puzzles OS v6.1</title>
+    <title>Logic Puzzles OS v6.2</title>
     
     <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -1302,15 +1302,25 @@
                 setHints(hints - 1);
             }
 
-            const handleSourceClick = (cIdx, charIdx, char) => { setSelectedSource({cIdx, charIdx, char}); };
+            const handleSourceClick = (cIdx, charIdx, char, isUsed) => { 
+                if (isUsed) return;
+                setSelectedSource({cIdx, charIdx, char}); 
+            };
             
             const handleDestClick = (row, col) => { 
+                // Case 1: Placing a selected letter
                 if (selectedSource && selectedSource.cIdx === col) { 
                     const newGrid = [...grid]; 
                     newGrid[row][col] = selectedSource.char; 
                     setGrid(newGrid); 
                     setSelectedSource(null); 
                 } 
+                // Case 2: Clearing a cell (if clicked without a selection)
+                else if (!selectedSource && grid[row][col]) {
+                    const newGrid = [...grid];
+                    newGrid[row][col] = null;
+                    setGrid(newGrid);
+                }
             };
             
             const check = () => {
@@ -1330,6 +1340,16 @@
                 else showAlert("The letters aren't quite right.", "Try Again");
             }
 
+            // Helper to count how many times a char is used in a specific column of the grid
+            const getGridCharCount = (colIdx, char) => {
+                let count = 0;
+                if (!grid || grid.length === 0) return 0;
+                for (let r = 0; r < grid.length; r++) {
+                    if (grid[r][colIdx] === char) count++;
+                }
+                return count;
+            };
+
             if (!data) return <DifficultySelector onSelect={newGame} />;
 
             return (
@@ -1341,26 +1361,49 @@
                     </div>
                     
                     {/* Source Letters */}
-                    <div className="flex gap-1 mb-4">
-                        {data.cols.map((col, cIdx) => (
-                            <div key={cIdx} className="flex flex-col gap-1 w-6 sm:w-8">
-                                {col.chars.map((char, charIdx) => {
-                                    // Check if this instance of char in this column is used
-                                    // Count occurrences in user grid for this column
-                                    // Simple logic: if user grid has N 'A's in col 0, and source has M 'A's, dim the first N 'A's in source?
-                                    // Better: Just check if user grid count >= source index + 1 for that char?
-                                    // Simplest: Just let them click. Visual feedback is tricky without unique IDs for every letter instance.
-                                    // We will just allow clicking always.
-                                    
-                                    const isSel = selectedSource?.cIdx === cIdx && selectedSource?.charIdx === charIdx;
-                                    return <div key={charIdx} onClick={() => handleSourceClick(cIdx, charIdx, char)} className={`w-6 h-6 sm:w-8 sm:h-8 border border-black flex items-center justify-center cursor-pointer text-lg bg-white ${isSel ? 'bg-black text-white' : ''}`}>{char}</div>
-                                })}
-                            </div>
-                        ))}
+                    <div className="flex gap-1 mb-4 select-none">
+                        {data.cols.map((col, cIdx) => {
+                            // Track usage for this column to determine visual state
+                            const charUsageMap = {}; 
+                            
+                            return (
+                                <div key={cIdx} className="flex flex-col gap-1 w-6 sm:w-8">
+                                    {col.chars.map((char, charIdx) => {
+                                        // How many times does this char appear in the user's grid col?
+                                        const usedInGrid = getGridCharCount(cIdx, char);
+                                        // How many have we rendered so far in this list?
+                                        const seenSoFar = charUsageMap[char] || 0;
+                                        
+                                        // If we have used this char in the grid more times than we have seen it in the list so far,
+                                        // mark this specific instance as "used".
+                                        const isUsed = seenSoFar < usedInGrid;
+                                        
+                                        // Increment seen count for next iteration
+                                        charUsageMap[char] = seenSoFar + 1;
+
+                                        const isSel = selectedSource?.cIdx === cIdx && selectedSource?.charIdx === charIdx;
+                                        
+                                        return (
+                                            <div 
+                                                key={charIdx} 
+                                                onClick={() => handleSourceClick(cIdx, charIdx, char, isUsed)} 
+                                                className={`
+                                                    w-6 h-6 sm:w-8 sm:h-8 border border-black flex items-center justify-center text-lg 
+                                                    ${isUsed ? 'bg-gray-300 text-gray-400 cursor-default' : 'cursor-pointer bg-white'}
+                                                    ${isSel ? '!bg-black !text-white' : ''}
+                                                `}
+                                            >
+                                                {char}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            );
+                        })}
                     </div>
                     
                     {/* Grid */}
-                    <div className="flex flex-col gap-1 border-t-2 border-black pt-4">
+                    <div className="flex flex-col gap-1 border-t-2 border-black pt-4 select-none">
                          {grid.map((row, rIdx) => (
                              <div key={rIdx} className="flex gap-1">
                                  {row.map((cell, cIdx) => {
@@ -1371,8 +1414,18 @@
                                      if (!isValidCell) return <div key={cIdx} className="w-6 h-6 sm:w-8 sm:h-8 bg-black"></div>;
                                      if (isSpace) return <div key={cIdx} className="w-6 h-6 sm:w-8 sm:h-8 bg-gray-300"></div>;
 
+                                     // Highlight column if source selected matches
+                                     const isTargetCol = selectedSource && selectedSource.cIdx === cIdx;
+
                                      return (
-                                        <div key={cIdx} onClick={() => handleDestClick(rIdx, cIdx)} className="w-6 h-6 sm:w-8 sm:h-8 border-2 border-black bg-white flex items-center justify-center text-lg cursor-pointer hover:bg-gray-100">
+                                        <div 
+                                            key={cIdx} 
+                                            onClick={() => handleDestClick(rIdx, cIdx)} 
+                                            className={`
+                                                w-6 h-6 sm:w-8 sm:h-8 border-2 border-black flex items-center justify-center text-lg cursor-pointer hover:bg-gray-100
+                                                ${isTargetCol ? 'bg-blue-50' : 'bg-white'}
+                                            `}
+                                        >
                                             {cell || ''}
                                         </div>
                                      );
