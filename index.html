@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Logic Puzzles OS</title>
+    <title>Logic Puzzles OS v5.0</title>
     
     <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -12,7 +12,7 @@
     <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- Tailwind CSS (via CDN for simplicity in one file) -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
     <!-- Google Fonts -->
@@ -43,9 +43,10 @@
                 linear-gradient(45deg, transparent 75%, #aaa 75%), 
                 linear-gradient(-45deg, transparent 75%, #aaa 75%);
             background-size: 4px 4px;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
-        /* Scrollbar styling for Retro Feel */
         ::-webkit-scrollbar { width: 12px; }
         ::-webkit-scrollbar-track { background: #fff; border-left: 1px solid #000; }
         ::-webkit-scrollbar-thumb { background: #000; border: 2px solid #fff; }
@@ -89,9 +90,12 @@
             cursor: pointer;
             font-family: 'VT323', monospace;
             font-size: 1.2rem;
-            padding: 4px 12px;
+            padding: 2px 10px;
             transition: all 0.1s;
             box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .retro-btn:active {
@@ -101,55 +105,19 @@
             box-shadow: none;
         }
 
-        .retro-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        /* Grid Utilities */
-        .cell-input {
-            width: 100%;
-            height: 100%;
-            text-align: center;
-            border: none;
-            outline: none;
-            background: transparent;
-            font-family: 'VT323', monospace;
-            font-size: 1.5rem;
-            color: black;
+        .retro-btn.small-sq {
+            width: 30px;
+            height: 30px;
+            padding: 0;
         }
         
-        /* Logic Grid Specifics */
-        .logic-cell {
+        .retro-menu-item {
+            padding: 4px 12px;
             cursor: pointer;
-            user-select: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2rem;
         }
-        .logic-cell:hover { background: #eee; }
-
-        /* General Shake Animation */
-        @keyframes shake {
-            0% { transform: translateX(0); }
-            25% { transform: translateX(-5px); }
-            50% { transform: translateX(5px); }
-            75% { transform: translateX(-5px); }
-            100% { transform: translateX(0); }
-        }
-        .shake { animation: shake 0.3s; }
-
-        /* Kakuro Diagonal Split */
-        .kakuro-clue {
-            background: #000;
-            color: #fff;
-            position: relative;
-            overflow: hidden;
-        }
-        .kakuro-clue svg line {
-            stroke: #fff;
-            stroke-width: 1;
+        .retro-menu-item:hover {
+            background: black;
+            color: white;
         }
     </style>
 </head>
@@ -157,144 +125,400 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect, useRef, useCallback } = React;
 
-        // --- PUZZLE DATA & GENERATORS ---
-
-        // 1. Sudoku (Simple 4x4 for demo, scalable logic)
-        // Standard 9x9 is big for mobile without zoom, let's do a 6x6 "Mini Sudoku" for students
-        const SUDOKU_DATA = {
-            initial: [
-                [0, 2, 0, 5, 0, 1],
-                [1, 0, 0, 0, 0, 2],
-                [0, 0, 0, 0, 4, 0],
-                [0, 5, 0, 0, 0, 0],
-                [2, 0, 0, 0, 0, 3],
-                [4, 0, 3, 0, 2, 0]
-            ],
-            solution: [
-                [3, 2, 6, 5, 4, 1],
-                [1, 4, 5, 3, 6, 2],
-                [5, 3, 2, 6, 4, 1], // Wait, generated manually, let's use a simpler check logic
-                // Actually for robustness, I will just validate rules rather than strict solution match
-            ]
-        };
-
-        // 2. KenKen (4x4)
-        const KENKEN_DATA = {
-            size: 4,
-            cages: [
-                { cells: [[0,0], [0,1]], target: 3, op: '+' },
-                { cells: [[0,2], [0,3]], target: 8, op: 'x' },
-                { cells: [[1,0], [2,0]], target: 2, op: '÷' },
-                { cells: [[1,1], [2,1]], target: 3, op: '-' },
-                { cells: [[1,2], [2,2]], target: 7, op: '+' },
-                { cells: [[1,3], [2,3]], target: 2, op: '-' },
-                { cells: [[3,0], [3,1]], target: 1, op: '-' },
-                { cells: [[3,2], [3,3]], target: 6, op: 'x' }
-            ]
-        };
-
-        // 3. Binary (6x6)
-        const BINARY_DATA = {
-            size: 6,
-            initial: [
-                [null, 1, null, null, 1, null],
-                [null, null, null, 1, null, 1],
-                [1, null, null, null, null, null],
-                [null, 1, 1, null, null, 1],
-                [null, null, null, 1, null, null],
-                [null, null, 1, null, null, null]
-            ]
-        };
-
-        // 4. Logic Grid
-        const LOGIC_DATA = {
-            categories: ["Name", "Subject", "Fruit"],
-            items: [
-                ["Alice", "Bob", "Charlie"],
-                ["Math", "Art", "Science"],
-                ["Apple", "Banana", "Cherry"]
-            ],
-            clues: [
-                "1. Alice hates numbers and science.",
-                "2. The person who likes Art eats Bananas.",
-                "3. Charlie brought a Cherry.",
-                "4. Bob does not like Math."
-            ],
-            // Solution for validation: Alice=Art=Banana? No, clue 2 says Art=Banana.
-            // Clue 1: Alice != Math, Alice != Science. So Alice = Art.
-            // Clue 2: Art(Alice) = Banana. So Alice = Banana.
-            // Clue 3: Charlie = Cherry.
-            // Clue 4: Bob != Math. Bob isn't Art (Alice is). So Bob = Science.
-            // Therefore: Charlie = Math.
-            // Final: Alice(Art, Banana), Bob(Science, Apple), Charlie(Math, Cherry).
-            solution: {
-                "Alice-Art": true, "Alice-Science": false, "Alice-Math": false,
-                "Bob-Art": false, "Bob-Science": true, "Bob-Math": false,
-                "Charlie-Art": false, "Charlie-Science": false, "Charlie-Math": true,
-                "Alice-Banana": true, "Alice-Apple": false, "Alice-Cherry": false,
-                "Bob-Banana": false, "Bob-Apple": true, "Bob-Cherry": false,
-                "Charlie-Banana": false, "Charlie-Apple": false, "Charlie-Cherry": true,
-                "Math-Apple": false, "Math-Banana": false, "Math-Cherry": true,
-                "Art-Apple": false, "Art-Banana": true, "Art-Cherry": false,
-                "Science-Apple": true, "Science-Banana": false, "Science-Cherry": false
+        // --- HELP DATA ---
+        const HELP_DATA = {
+            sudoku: {
+                rules: [
+                    "Fill the 6x6 grid with numbers 1-6.",
+                    "Each row must contain numbers 1-6 exactly once.",
+                    "Each column must contain numbers 1-6 exactly once.",
+                    "Each 2x3 bold box must contain numbers 1-6 exactly once."
+                ],
+                tips: [
+                    "Start by looking for rows, columns, or boxes that are almost full.",
+                    "Process of Elimination: If a number can't go in 2 spots of a row, it MUST go in the 3rd.",
+                    "Cross-check: Look at a box and see which numbers are missing, then check the crossing rows/cols to see what is allowed."
+                ]
+            },
+            kenken: {
+                rules: [
+                    "Fill the grid with numbers 1-4.",
+                    "No numbers can repeat in any row or column.",
+                    "The numbers in each heavily outlined 'cage' must combine (using the math sign shown) to reach the target number."
+                ],
+                tips: [
+                    "Freebies: A cage with one square and no math sign is just that number!",
+                    "Work backwards: For '3-' with numbers 1-4, the pairs can only be (4,1) or (3,2). Check the neighbors to see which fits.",
+                    "For '2÷', the numbers must be (2,1) or (4,2)."
+                ]
+            },
+            binary: {
+                rules: [
+                    "Fill every square with either a 0 or a 1.",
+                    "No triples: You cannot place three of the same number side-by-side (e.g., '000' is forbidden).",
+                    "Balance: Each row and column must have exactly three 0s and three 1s."
+                ],
+                tips: [
+                    "Find Pairs: If you see '00', put a '1' on both ends immediately.",
+                    "Avoid Sandwiches: If you see '0 _ 0', the middle must be '1'. If it were '0', you'd have '000'!",
+                    "Count: If a row has three 1s already, fill the rest with 0s."
+                ]
+            },
+            logic: {
+                rules: [
+                    "Use the clues to deduce relationships.",
+                    "Place an 'O' for a TRUE match and an 'X' for a mismatch.",
+                    "Once you place an 'O', the rest of that row and column in that section become 'X's."
+                ],
+                tips: [
+                    "Start with direct facts (e.g., 'Alice likes Red').",
+                    "Use the Transitive Property: If A = B and B = C, then A = C.",
+                    "Process of Elimination: If a person doesn't like Red, Blue, or Green, check if there's a fourth option or if you missed a clue."
+                ]
+            },
+            kakuro: {
+                rules: [
+                    "Fill white squares with numbers 1-9.",
+                    "The sum of a horizontal run must equal the clue on its left.",
+                    "The sum of a vertical run must equal the clue on its top.",
+                    "No number can be repeated within a single sum."
+                ],
+                tips: [
+                    "Learn unique sums: A sum of 3 in two squares is always 1+2.",
+                    "A sum of 4 in two squares is always 1+3 (since 2+2 repeats).",
+                    "A sum of 17 in two squares is always 8+9."
+                ]
+            },
+            crypto: {
+                rules: [
+                    "Decipher the quote.",
+                    "Each letter in the puzzle stands for a different letter in the alphabet (e.g., X might equal A).",
+                    "The pattern is consistent throughout the whole puzzle."
+                ],
+                tips: [
+                    "One letter words are almost always 'A' or 'I'.",
+                    "Look for common three-letter words like 'THE' or 'AND'.",
+                    "Look for double letters. 'LL', 'SS', 'EE', 'OO' are common doubles."
+                ]
+            },
+            drop: {
+                rules: [
+                    "Form a quote in the grid.",
+                    "Letters start at the top of their column and drop straight down.",
+                    "You must decide which row each letter lands in."
+                ],
+                tips: [
+                    "Find columns with only 1 or 2 letters first.",
+                    "Look for common words. If you see 'T', 'H', 'E' near each other, try to form 'THE'.",
+                    "Cross out letters at the top as you use them."
+                ]
             }
         };
 
-        // 5. Kakuro (Small 4x4ish)
-        const KAKURO_DATA = {
-            grid: [
-                [{t:'b'}, {t:'c', d:4}, {t:'c', d:16}, {t:'b'}],
-                [{t:'c', r:4}, {t:'i'}, {t:'i'}, {t:'c', d:3}],
-                [{t:'c', r:6}, {t:'i'}, {t:'i'}, {t:'i'}],
-                [{t:'b'}, {t:'c', r:4}, {t:'i'}, {t:'i'}]
-            ],
-            // i=input, c=clue (d=down, r=right), b=black
-            // Solution:
-            // Row 1 (4): 1, 3.
-            // Row 2 (6): 3, 2, 1. (Wait, 3+2+1=6). 
-            // Col 1 (4): 1, 3.
-            // Col 2 (16): 3, ? ... let's verify logic.
-            // Let's use a simpler known puzzle.
-            //      \ 4 \ 3
-            // 3 \  1   2
-            // 4 \  3   1
-            // Simple 2x2 playable area
-             rows: 2, cols: 2,
-             map: [
-                 {x:0, y:0, type:'b'}, {x:1, y:0, type:'c', d:4}, {x:2, y:0, type:'c', d:3},
-                 {x:0, y:1, type:'c', r:3}, {x:1, y:1, type:'i', v:1}, {x:2, y:1, type:'i', v:2},
-                 {x:0, y:2, type:'c', r:4}, {x:1, y:2, type:'i', v:3}, {x:2, y:2, type:'i', v:1}
-             ]
+        // --- UTILS ---
+        const shuffle = (array) => {
+            let arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
         };
 
-        // 6. Cryptography
-        const CRYPTO_DATA = {
-            quote: "LEARNING IS FUN",
-            cipher: {'L':'X', 'E':'Q', 'A':'W', 'R':'T', 'N':'P', 'I':'J', 'G':'M', 'S':'K', 'F':'Z', 'U':'V'}
-            // Ciphertext: XQWTPJPM JK ZVP
+        // --- GENERATORS ---
+
+        // 1. SUDOKU (6x6)
+        const generateSudokuPuzzle = (level) => {
+            const size = 6;
+            const boxH = 2, boxW = 3;
+            let board = Array(size).fill().map(() => Array(size).fill(0));
+
+            const isValid = (bd, r, c, num) => {
+                for (let i = 0; i < size; i++) if (bd[r][i] === num || bd[i][c] === num) return false;
+                const br = Math.floor(r / boxH) * boxH;
+                const bc = Math.floor(c / boxW) * boxW;
+                for (let i = 0; i < boxH; i++)
+                    for (let j = 0; j < boxW; j++)
+                        if (bd[br + i][bc + j] === num) return false;
+                return true;
+            };
+
+            const solve = (bd) => {
+                for (let r = 0; r < size; r++) {
+                    for (let c = 0; c < size; c++) {
+                        if (bd[r][c] === 0) {
+                            const nums = shuffle([1, 2, 3, 4, 5, 6]);
+                            for (let num of nums) {
+                                if (isValid(bd, r, c, num)) {
+                                    bd[r][c] = num;
+                                    if (solve(bd)) return true;
+                                    bd[r][c] = 0;
+                                }
+                            }
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            };
+
+            solve(board);
+            const solution = board.map(row => [...row]);
+
+            const holes = 10 + ((level - 1) * 3);
+            for (let i = 0; i < holes; i++) {
+                let r = Math.floor(Math.random() * size);
+                let c = Math.floor(Math.random() * size);
+                board[r][c] = 0;
+            }
+            return { initial: board, solution };
         };
 
-        // 7. Drop Quotes
-        const DROP_DATA = {
-            quote: ["TIME", "FLIES"],
-            columns: [
-                ['T','F'], ['I','L'], ['M','I'], ['E','E', 'S'] // S is extra? no Time Flies is 4, 5.
-            ]
-            // Simplified: "KEEP CALM"
-            // K E E P
-            // C A L M
-            // Cols: [C,K], [E,A], [E,L], [P,M]
+        // 2. KENKEN (4x4)
+        const generateKenKenPuzzle = (level) => {
+            const size = 4;
+            let board = Array(size).fill().map(() => Array(size).fill(0));
+            const isValid = (bd, r, c, num) => {
+                for (let i = 0; i < size; i++) if (bd[r][i] === num || bd[i][c] === num) return false;
+                return true;
+            };
+            const fillBoard = (bd) => {
+                for (let r = 0; r < size; r++) {
+                    for (let c = 0; c < size; c++) {
+                        if (bd[r][c] === 0) {
+                            const nums = shuffle([1, 2, 3, 4]);
+                            for (let num of nums) {
+                                if (isValid(bd, r, c, num)) {
+                                    bd[r][c] = num;
+                                    if (fillBoard(bd)) return true;
+                                    bd[r][c] = 0;
+                                }
+                            }
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            };
+            fillBoard(board);
+
+            let visited = Array(size).fill().map(() => Array(size).fill(false));
+            let cages = [];
+            const maxCageSize = level < 3 ? 2 : 4; 
+
+            for (let r = 0; r < size; r++) {
+                for (let c = 0; c < size; c++) {
+                    if (!visited[r][c]) {
+                        let cageCells = [[r,c]];
+                        visited[r][c] = true;
+                        
+                        let neighbors = [[r+1,c], [r,c+1], [r-1,c], [r,c-1]];
+                        shuffle(neighbors);
+                        for(let n of neighbors) {
+                            if(cageCells.length >= maxCageSize) break;
+                            if(n[0]>=0 && n[0]<size && n[1]>=0 && n[1]<size && !visited[n[0]][n[1]]) {
+                                if(Math.random() > 0.3) {
+                                    cageCells.push(n);
+                                    visited[n[0]][n[1]] = true;
+                                }
+                            }
+                        }
+
+                        const vals = cageCells.map(pos => board[pos[0]][pos[1]]);
+                        vals.sort((a,b)=>b-a);
+                        
+                        let op = '+';
+                        let target = vals.reduce((a,b)=>a+b, 0);
+
+                        const allowSub = level >= 2 && vals.length === 2;
+                        const allowMult = level >= 3;
+                        const allowDiv = level >= 4 && vals.length === 2;
+
+                        if (vals.length === 2) {
+                            const diff = vals[0] - vals[1];
+                            const div = vals[0] / vals[1];
+                            const mult = vals[0] * vals[1];
+                            
+                            let choices = [{op:'+', t:target}];
+                            if (allowSub && diff > 0) choices.push({op:'-', t:diff});
+                            if (allowMult && mult < 24) choices.push({op:'x', t:mult});
+                            if (allowDiv && Number.isInteger(div)) choices.push({op:'÷', t:div});
+                            
+                            const pick = choices[Math.floor(Math.random() * choices.length)];
+                            op = pick.op;
+                            target = pick.t;
+                        } else if (vals.length > 2 && allowMult) {
+                             if (Math.random() > 0.5) {
+                                 const mult = vals.reduce((a,b)=>a*b, 1);
+                                 if (mult < 100) { op = 'x'; target = mult; }
+                             }
+                        }
+
+                        cages.push({ cells: cageCells, target, op });
+                    }
+                }
+            }
+            return { size, cages, solution: board };
+        };
+
+        // 3. BINARY (6x6)
+        const generateBinaryPuzzle = (level) => {
+            const size = 6;
+            let board = Array(size).fill().map(() => Array(size).fill(null));
+
+            const isValid = (bd, r, c, val) => {
+                if (r >= 2 && bd[r-1][c] === val && bd[r-2][c] === val) return false;
+                if (c >= 2 && bd[r][c-1] === val && bd[r][c-2] === val) return false;
+                let rowCount = 0, colCount = 0;
+                for(let i=0; i<c; i++) if(bd[r][i] === val) rowCount++;
+                for(let i=0; i<r; i++) if(bd[i][c] === val) colCount++;
+                if (rowCount >= size/2 || colCount >= size/2) return false;
+                return true;
+            };
+
+            const solve = (r, c) => {
+                if (r === size) return true;
+                const nextR = c === size - 1 ? r + 1 : r;
+                const nextC = c === size - 1 ? 0 : c + 1;
+                const vals = shuffle([0, 1]);
+                for (let val of vals) {
+                    if (isValid(board, r, c, val)) {
+                        board[r][c] = val;
+                        if (solve(nextR, nextC)) return true;
+                        board[r][c] = null;
+                    }
+                }
+                return false;
+            };
+            solve(0,0);
+            
+            const solution = board.map(row => [...row]);
+            const initial = board.map(row => [...row]);
+
+            const fillFactor = 0.6 - (level * 0.1); 
+            for(let r=0; r<size; r++){
+                for(let c=0; c<size; c++){
+                    if(Math.random() > fillFactor) initial[r][c] = null;
+                }
+            }
+            return { initial, solution };
+        };
+
+        // 4. KAKURO 
+        const generateKakuroPuzzle = (level) => {
+            const layout = [
+                ['b', 'v', 'v', 'b'],
+                ['v', 'v', 'v', 'v'],
+                ['v', 'v', 'v', 'v'],
+                ['b', 'v', 'v', 'b']
+            ];
+            const H = 4, W = 4;
+            let values = Array(H).fill().map(() => Array(W).fill(0));
+
+            const getRun = (r, c, dr, dc) => {
+                let nums = new Set();
+                let currR = r, currC = c;
+                while(currR >= 0 && currC >= 0 && layout[currR][currC] === 'v') {
+                    if (values[currR][currC] !== 0) nums.add(values[currR][currC]);
+                    currR -= dr; currC -= dc;
+                }
+                return nums;
+            };
+
+            const solveKakuro = (idx) => {
+                if (idx === H * W) return true;
+                const r = Math.floor(idx / W);
+                const c = idx % W;
+                if (layout[r][c] === 'b') return solveKakuro(idx + 1);
+
+                const usedH = getRun(r, c, 0, 1);
+                const usedV = getRun(r, c, 1, 0);
+                
+                const nums = shuffle([1,2,3,4,5,6,7,8,9]);
+                for (let n of nums) {
+                    if (!usedH.has(n) && !usedV.has(n)) {
+                        values[r][c] = n;
+                        if (solveKakuro(idx + 1)) return true;
+                        values[r][c] = 0;
+                    }
+                }
+                return false;
+            };
+            solveKakuro(0);
+
+            let map = [];
+            const revealChance = Math.max(0, 0.6 - (level * 0.1));
+
+            for(let r=0; r<H; r++){
+                for(let c=0; c<W; c++){
+                    if(layout[r][c] === 'v') {
+                        let cell = {x:c, y:r, type:'i', v: values[r][c]};
+                        if (Math.random() < revealChance) cell.revealed = true;
+                        map.push(cell);
+                    } else {
+                        let clue = {x:c, y:r, type:'c'};
+                        if (r+1 < H && layout[r+1][c] === 'v') {
+                            let sum = 0;
+                            for(let k=r+1; k<H && layout[k][c]==='v'; k++) sum += values[k][c];
+                            clue.d = sum;
+                        }
+                        if (c+1 < W && layout[r][c+1] === 'v') {
+                            let sum = 0;
+                            for(let k=c+1; k<W && layout[r][k]==='v'; k++) sum += values[r][k];
+                            clue.r = sum;
+                        }
+                        if (clue.d || clue.r) map.push(clue);
+                        else map.push({x:c, y:r, type:'b'});
+                    }
+                }
+            }
+            return { rows: H, cols: W, map, solution: values };
+        };
+
+        // 5. LOGIC GRID
+        const NAMES_POOL = ["Alice", "Bob", "Charlie", "Dave", "Eve"];
+        const ITEM1_POOL = ["Red", "Blue", "Green", "Yellow", "Purple"]; 
+        const ITEM2_POOL = ["Dog", "Cat", "Bird", "Fish", "Hamster"];
+
+        const generateLogicPuzzle = (level) => {
+            const names = shuffle(NAMES_POOL).slice(0, 3);
+            const colors = shuffle(ITEM1_POOL).slice(0, 3);
+            const pets = shuffle(ITEM2_POOL).slice(0, 3);
+
+            let solution = {};
+            names.forEach((n, i) => {
+                solution[`${n}-${colors[i]}`] = true;
+                solution[`${n}-${pets[i]}`] = true;
+                solution[`${colors[i]}-${pets[i]}`] = true; 
+            });
+
+            let clues = [];
+            clues.push(`${names[0]} likes the color ${colors[0]}.`);
+            clues.push(`The person who owns the ${pets[1]} likes ${colors[1]}.`);
+            clues.push(`${names[2]} owns a ${pets[2]}.`);
+            
+            clues.push(`${names[1]} does not own a ${pets[0]}.`);
+            if (level > 2) clues.push(`${names[0]} does not like ${colors[1]}.`);
+            if (level > 3) clues.push(`The owner of the ${pets[2]} does not like ${colors[0]}.`);
+            
+            clues = shuffle(clues);
+
+            return {
+                categories: ["Name", "Color", "Pet"],
+                items: [names, colors, pets],
+                clues: clues,
+                solution: solution
+            };
         };
 
 
         // --- COMPONENTS ---
 
         const Icon = ({ name, label, onClick }) => (
-            <div onClick={onClick} className="flex flex-col items-center justify-center p-4 cursor-pointer hover:bg-black/10 rounded w-24">
-                <div className="w-12 h-12 border-2 border-black bg-white flex items-center justify-center mb-1 shadow-[2px_2px_0px_rgba(0,0,0,0.2)]">
-                     {/* Dynamic Icon based on name */}
+            <div onClick={onClick} className="flex flex-col items-center justify-center p-4 cursor-pointer hover:bg-black/10 rounded w-24 group">
+                <div className="w-12 h-12 border-2 border-black bg-white flex items-center justify-center mb-1 shadow-[2px_2px_0px_rgba(0,0,0,0.2)] group-active:translate-y-px group-active:shadow-none transition-transform">
                      {name === 'sudoku' && <div className="grid grid-cols-2 gap-px bg-black w-8 h-8 border border-black"><div className="bg-white"></div><div className="bg-white"></div><div className="bg-white"></div><div className="bg-white"></div></div>}
                      {name === 'kenken' && <div className="font-bold text-xl">4÷</div>}
                      {name === 'binary' && <div className="font-bold text-xl">10</div>}
@@ -308,82 +532,149 @@
         );
 
         const Window = ({ title, onClose, children, width = "w-full max-w-2xl" }) => (
-            <div className={`fixed inset-0 flex items-center justify-center p-2 z-50`} style={{background: 'rgba(0,0,0,0.2)'}}>
-                <div className={`retro-window ${width} h-full max-h-[90vh] flex flex-col`}>
+            <div className={`fixed inset-0 flex items-center justify-center p-2 z-40`} style={{background: 'rgba(0,0,0,0.2)'}}>
+                <div className={`retro-window ${width} h-full max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200`}>
                     <div className="title-bar">
-                        <div className="w-4 h-4 border border-black bg-white" onClick={onClose}></div>
+                        <div className="w-4 h-4 border border-black bg-white cursor-pointer hover:bg-black flex items-center justify-center" onClick={onClose}>
+                             <div className="w-2 h-0.5 bg-current"></div>
+                        </div>
                         <div className="title-lines"></div>
                         <span className="font-bold uppercase tracking-widest">{title}</span>
                         <div className="title-lines"></div>
                         <div className="w-4 h-4"></div>
                     </div>
-                    <div className="flex-grow overflow-auto p-4 bg-white relative">
+                    <div className="flex-grow overflow-auto p-4 bg-white relative flex flex-col items-center w-full">
                         {children}
                     </div>
                 </div>
             </div>
         );
 
+        const RetroAlert = ({ title, message, onClose }) => (
+            <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-auto" style={{background: 'rgba(0,0,0,0.1)'}}>
+                <div className="retro-window w-80 bg-white p-1 shadow-2xl">
+                    <div className="title-bar mb-4">
+                        <div className="title-lines"></div>
+                        <span className="font-bold">{title || 'System Message'}</span>
+                        <div className="title-lines"></div>
+                    </div>
+                    <div className="px-6 py-4 text-center text-lg">
+                        {message}
+                    </div>
+                    <div className="flex justify-center p-4">
+                        <button className="retro-btn w-24" onClick={onClose}>OK</button>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const DifficultySelector = ({ onSelect }) => (
+            <div className="flex flex-col items-center mb-4 w-full">
+                <span className="text-sm font-bold mb-1 uppercase tracking-wider">Select Difficulty Level</span>
+                <div className="flex gap-2">
+                    {[1,2,3,4,5].map(lvl => (
+                        <button key={lvl} onClick={() => onSelect(lvl)} className="retro-btn small-sq font-bold text-lg hover:bg-black hover:text-white">
+                            {lvl}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        );
+
+        const Hints = ({ remaining, onUseHint }) => (
+            <div className="flex items-center gap-2 mb-2 bg-gray-100 p-1 px-3 border border-gray-400 rounded-full">
+                <span className="text-xs font-bold uppercase mr-1">Hints:</span>
+                {[1, 2, 3].map(i => (
+                    <div key={i} className={`w-4 h-4 border border-black ${i <= remaining ? 'bg-yellow-300' : 'bg-transparent relative'}`}>
+                        {i > remaining && <div className="absolute inset-0 flex items-center justify-center"><div className="w-full h-px bg-black rotate-45 absolute"></div><div className="w-full h-px bg-black -rotate-45 absolute"></div></div>}
+                    </div>
+                ))}
+                <button 
+                    disabled={remaining === 0} 
+                    onClick={onUseHint}
+                    className="ml-2 text-xs border border-black px-1 hover:bg-black hover:text-white disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-black">
+                    USE
+                </button>
+            </div>
+        );
+
         const Numpad = ({ onInput, showClear = true }) => (
-            <div className="grid grid-cols-3 gap-2 mt-4 max-w-[200px] mx-auto">
+            <div className="grid grid-cols-3 gap-2 mt-4 max-w-[200px] mx-auto select-none">
                 {[1,2,3,4,5,6,7,8,9].map(n => (
-                    <button key={n} onClick={() => onInput(n)} className="retro-btn h-10">{n}</button>
+                    <button key={n} onClick={() => onInput(n)} className="retro-btn h-10 touch-manipulation font-bold text-lg">{n}</button>
                 ))}
                 {showClear && <button onClick={() => onInput(null)} className="retro-btn col-span-3">Clear</button>}
             </div>
         );
 
-        // --- APP IMPLEMENTATIONS ---
+        // --- APPS ---
 
-        const SudokuApp = () => {
-            const [grid, setGrid] = useState(SUDOKU_DATA.initial.map(row => [...row]));
+        const SudokuApp = ({ showAlert, onSolve }) => {
+            const [data, setData] = useState(null);
+            const [grid, setGrid] = useState([]);
             const [selected, setSelected] = useState([0, 0]);
-            
+            const [hints, setHints] = useState(3);
+            const [level, setLevel] = useState(1);
+
+            const newGame = (lvl) => {
+                setLevel(lvl);
+                const d = generateSudokuPuzzle(lvl);
+                setData(d);
+                setGrid(d.initial.map(row => [...row]));
+                setSelected([0,0]);
+                setHints(3);
+            };
+
+            const useHint = () => {
+                if (hints <= 0) return;
+                let empty = [];
+                for(let r=0; r<6; r++) for(let c=0; c<6; c++) if(grid[r][c] === 0) empty.push([r,c]);
+                if(empty.length === 0) return;
+                
+                const [r, c] = empty[Math.floor(Math.random() * empty.length)];
+                const newGrid = [...grid];
+                newGrid[r][c] = data.solution[r][c];
+                setGrid(newGrid);
+                setHints(hints - 1);
+            };
+
             const handleInput = (val) => {
-                if (SUDOKU_DATA.initial[selected[0]][selected[1]] !== 0) return; // Locked cell
+                if (!data) return;
+                if (data.initial[selected[0]][selected[1]] !== 0) return;
                 const newGrid = [...grid];
                 newGrid[selected[0]][selected[1]] = val || 0;
                 setGrid(newGrid);
             };
 
             const checkWin = () => {
-                // Simplified validation: Check no duplicates in rows/cols
                 let valid = true;
-                // Check rows
-                for(let r=0; r<6; r++) {
-                    let seen = new Set();
-                    for(let c=0; c<6; c++) {
-                        let val = grid[r][c];
-                        if(val === 0 || seen.has(val)) valid = false;
-                        seen.add(val);
-                    }
+                for(let r=0; r<6; r++) for(let c=0; c<6; c++) if (grid[r][c] !== data.solution[r][c]) valid = false;
+                if (valid) {
+                    const score = (100 * level) - ((3 - hints) * 20);
+                    showAlert(`Correct! Level ${level} Solved. Points: ${score}`, "Success");
+                    onSolve('sudoku', score);
+                } else {
+                    showAlert("Errors found.", "Try Again");
                 }
-                // Check cols
-                for(let c=0; c<6; c++) {
-                    let seen = new Set();
-                    for(let r=0; r<6; r++) {
-                        let val = grid[r][c];
-                        if(val === 0 || seen.has(val)) valid = false;
-                        seen.add(val);
-                    }
-                }
-                
-                alert(valid ? "Correct!" : "Incorrect. Keep trying.");
             };
 
+            if (!data) return <DifficultySelector onSelect={newGame} />;
+
             return (
-                <div className="flex flex-col items-center h-full">
-                    <div className="grid grid-cols-6 gap-0 border-2 border-black mb-4">
+                <div className="flex flex-col items-center h-full w-full">
+                    <div className="flex justify-between w-full max-w-[300px] mb-2 items-center">
+                        <button className="retro-btn text-xs" onClick={() => setData(null)}>Back</button>
+                        <Hints remaining={hints} onUseHint={useHint} />
+                        <span className="text-xs font-bold">Lvl {level}</span>
+                    </div>
+                    <div className="grid grid-cols-6 gap-0 border-2 border-black mb-4 select-none">
                         {grid.map((row, r) => row.map((cell, c) => {
-                            const isLocked = SUDOKU_DATA.initial[r][c] !== 0;
+                            const isLocked = data.initial[r][c] !== 0;
                             const isSelected = selected[0] === r && selected[1] === c;
-                            // Borders for 2x3 blocks
                             const borderR = (c+1)%3 === 0 && c!==5 ? "border-r-2 border-black" : "border-r border-gray-400";
                             const borderB = (r+1)%2 === 0 && r!==5 ? "border-b-2 border-black" : "border-b border-gray-400";
-                            
                             return (
-                                <div key={`${r}-${c}`} 
-                                     onClick={() => setSelected([r,c])}
+                                <div key={`${r}-${c}`} onClick={() => setSelected([r,c])}
                                      className={`w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center cursor-pointer text-xl
                                          ${borderR} ${borderB}
                                          ${isSelected ? 'bg-black text-white' : (isLocked ? 'bg-gray-200 font-bold' : 'bg-white')}
@@ -393,73 +684,83 @@
                             );
                         }))}
                     </div>
-                    <div className="flex gap-2">
-                        <button className="retro-btn" onClick={checkWin}>Check</button>
-                    </div>
+                    <button className="retro-btn" onClick={checkWin}>Check</button>
                     <Numpad onInput={handleInput} />
                 </div>
             );
         };
 
-        const KenKenApp = () => {
-            const [grid, setGrid] = useState(Array(4).fill().map(() => Array(4).fill(0)));
+        const KenKenApp = ({ showAlert, onSolve }) => {
+            const [data, setData] = useState(null);
+            const [grid, setGrid] = useState([]);
             const [selected, setSelected] = useState([0,0]);
+            const [hints, setHints] = useState(3);
+            const [level, setLevel] = useState(1);
 
-            const getCage = (r, c) => KENKEN_DATA.cages.find(cage => cage.cells.some(([cr, cc]) => cr === r && cc === c));
+            const newGame = (lvl) => {
+                setLevel(lvl);
+                const d = generateKenKenPuzzle(lvl);
+                setData(d);
+                setGrid(Array(d.size).fill().map(() => Array(d.size).fill(0)));
+                setSelected([0,0]);
+                setHints(3);
+            };
+
+            const useHint = () => {
+                if(hints <= 0) return;
+                let empty = [];
+                for(let r=0; r<4; r++) for(let c=0; c<4; c++) if(grid[r][c] === 0) empty.push([r,c]);
+                if(empty.length === 0) return;
+                const [r,c] = empty[Math.floor(Math.random()*empty.length)];
+                const newGrid = [...grid];
+                newGrid[r][c] = data.solution[r][c];
+                setGrid(newGrid);
+                setHints(hints-1);
+            }
+
+            const getCage = (r, c) => data ? data.cages.find(cage => cage.cells.some(([cr, cc]) => cr === r && cc === c)) : null;
 
             const handleInput = (val) => {
+                if (val > 4) return;
                 const newGrid = [...grid];
                 newGrid[selected[0]] = [...newGrid[selected[0]]];
                 newGrid[selected[0]][selected[1]] = val || 0;
                 setGrid(newGrid);
             };
             
-            // Validation Logic
             const checkWin = () => {
                  let valid = true;
-                 // 1. Check Row/Col Uniqueness
-                 for(let i=0; i<4; i++){
-                     let rowS = new Set(), colS = new Set();
-                     for(let j=0; j<4; j++){
-                         if(grid[i][j]===0 || rowS.has(grid[i][j])) valid=false;
-                         if(grid[j][i]===0 || colS.has(grid[j][i])) valid=false;
-                         rowS.add(grid[i][j]); colS.add(grid[j][i]);
-                     }
+                 for(let r=0; r<4; r++) for(let c=0; c<4; c++) if(grid[r][c] !== data.solution[r][c]) valid = false;
+                 
+                 if (valid) {
+                     const score = (100 * level) - ((3 - hints) * 20);
+                     showAlert(`Calculation Correct! Points: ${score}`, "Math Genius");
+                     onSolve('kenken', score);
+                 } else {
+                     showAlert("Incorrect.", "Error");
                  }
-                 // 2. Check Cages
-                 KENKEN_DATA.cages.forEach(cage => {
-                     const values = cage.cells.map(([r,c]) => grid[r][c]);
-                     values.sort((a,b)=>b-a); // Desc for subtraction/division
-                     let result = 0;
-                     if (cage.op === '+') result = values.reduce((a,b)=>a+b, 0);
-                     else if (cage.op === 'x') result = values.reduce((a,b)=>a*b, 1);
-                     else if (cage.op === '-') result = values[0] - values[1];
-                     else if (cage.op === '÷') result = values[0] / values[1];
-                     
-                     if (result !== cage.target) valid = false;
-                 });
-
-                 alert(valid ? "Correct!" : "Something is wrong.");
             };
 
+            if (!data) return <DifficultySelector onSelect={newGame} />;
+
             return (
-                <div className="flex flex-col items-center h-full">
-                    <div className="relative border-2 border-black grid grid-cols-4 gap-0 mb-4 select-none">
-                         {/* Grid Rendering */}
+                <div className="flex flex-col items-center h-full w-full">
+                    <div className="flex justify-between w-full max-w-[250px] mb-2 items-center">
+                        <button className="retro-btn text-xs" onClick={() => setData(null)}>Back</button>
+                        <Hints remaining={hints} onUseHint={useHint} />
+                        <span className="text-xs font-bold">Lvl {level}</span>
+                    </div>
+                    <div className="relative border-2 border-black grid grid-cols-4 gap-0 mb-4 select-none bg-black">
                          {grid.map((row, r) => row.map((cell, c) => {
                              const cage = getCage(r,c);
-                             // Determine borders based on cage adjacency
-                             // Simple hack: Draw thick borders if neighbor not in same cage
+                             if (!cage) return null;
                              const isTop = r===0 || !getCage(r-1, c) || getCage(r-1,c) !== cage;
                              const isLeft = c===0 || !getCage(r, c-1) || getCage(r,c-1) !== cage;
                              const isSelected = selected[0]===r && selected[1]===c;
-
-                             // Show clue if top-left of cage
                              const showClue = cage.cells[0][0] === r && cage.cells[0][1] === c;
 
                              return (
-                                 <div key={`${r}-${c}`} 
-                                      onClick={() => setSelected([r,c])}
+                                 <div key={`${r}-${c}`} onClick={() => setSelected([r,c])}
                                       className={`w-12 h-12 flex items-center justify-center relative cursor-pointer
                                         border border-gray-300
                                         ${isTop ? 'border-t-2 border-t-black' : ''}
@@ -467,23 +768,51 @@
                                         ${isSelected ? 'bg-black text-white' : 'bg-white text-black'}
                                       `}
                                  >
-                                     {showClue && <span className={`absolute top-0 left-0 text-[10px] leading-3 p-0.5 ${isSelected?'text-white':'text-black'}`}>{cage.target}{cage.op}</span>}
-                                     <span className="text-xl">{cell || ''}</span>
+                                     {showClue && <span className={`absolute top-0 left-0 text-sm font-bold leading-3 p-0.5 ${isSelected?'text-white':'text-black'}`} style={{zIndex: 5}}>{cage.target}{cage.op}</span>}
+                                     <span className="text-xl mt-2">{cell || ''}</span>
                                  </div>
                              )
                          }))}
                     </div>
                     <button className="retro-btn mb-2" onClick={checkWin}>Check</button>
-                    <Numpad onInput={handleInput} />
+                    <div className="grid grid-cols-2 gap-2 mt-4 max-w-[150px] mx-auto select-none">
+                        {[1,2,3,4].map(n => (
+                            <button key={n} onClick={() => handleInput(n)} className="retro-btn h-10 touch-manipulation font-bold text-lg">{n}</button>
+                        ))}
+                        <button onClick={() => handleInput(null)} className="retro-btn col-span-2">Clear</button>
+                    </div>
                 </div>
             )
         };
 
-        const BinaryApp = () => {
-            const [grid, setGrid] = useState(JSON.parse(JSON.stringify(BINARY_DATA.initial)));
+        const BinaryApp = ({ showAlert, onSolve }) => {
+            const [data, setData] = useState(null);
+            const [grid, setGrid] = useState([]);
+            const [hints, setHints] = useState(3);
+            const [level, setLevel] = useState(1);
+
+            const newGame = (lvl) => {
+                setLevel(lvl);
+                const d = generateBinaryPuzzle(lvl);
+                setData(d);
+                setGrid(JSON.parse(JSON.stringify(d.initial)));
+                setHints(3);
+            };
+
+            const useHint = () => {
+                if(hints <=0) return;
+                let empty = [];
+                for(let r=0; r<6; r++) for(let c=0; c<6; c++) if(grid[r][c] === null) empty.push([r,c]);
+                if(empty.length === 0) return;
+                const [r,c] = empty[Math.floor(Math.random()*empty.length)];
+                const newGrid = [...grid];
+                newGrid[r][c] = data.solution[r][c];
+                setGrid(newGrid);
+                setHints(hints-1);
+            }
 
             const toggleCell = (r, c) => {
-                if (BINARY_DATA.initial[r][c] !== null) return; // Locked
+                if (!data || data.initial[r][c] !== null) return;
                 const newGrid = [...grid];
                 const val = newGrid[r][c];
                 newGrid[r][c] = val === null ? 0 : (val === 0 ? 1 : null);
@@ -492,34 +821,30 @@
 
             const checkWin = () => {
                 let valid = true;
-                // Check rows/cols for: Max 2 same consec, Equal 0s and 1s
-                for(let i=0; i<6; i++) {
-                    let r0=0, r1=0, c0=0, c1=0;
-                    for(let j=0; j<6; j++) {
-                        // Row counts
-                        if(grid[i][j]===0) r0++; else if(grid[i][j]===1) r1++; else valid=false;
-                        // Col counts
-                        if(grid[j][i]===0) c0++; else if(grid[j][i]===1) c1++; else valid=false;
-
-                        // Consec Rows
-                        if(j>1 && grid[i][j]!==null && grid[i][j] === grid[i][j-1] && grid[i][j] === grid[i][j-2]) valid=false;
-                        // Consec Cols
-                        if(j>1 && grid[j][i]!==null && grid[j][i] === grid[j-1][i] && grid[j][i] === grid[j-2][i]) valid=false;
-                    }
-                    if(r0!==3 || r1!==3 || c0!==3 || c1!==3) valid = false;
+                for(let r=0; r<6; r++) for(let c=0; c<6; c++) if (grid[r][c] !== data.solution[r][c]) valid = false;
+                if (valid) {
+                    const score = (100 * level) - ((3 - hints) * 20);
+                    showAlert(`Binary sequence valid. Points: ${score}`, "System Valid");
+                    onSolve('binary', score);
+                } else {
+                    showAlert("Pattern violation detected.", "Invalid");
                 }
-                alert(valid ? "Correct!" : "Rules violated.");
             }
 
+            if (!data) return <DifficultySelector onSelect={newGame} />;
+
             return (
-                <div className="flex flex-col items-center h-full">
-                    <p className="mb-2 text-sm text-center">Rules: No more than two 0s or 1s next to each other. Equal 0s and 1s in each row/col.</p>
+                <div className="flex flex-col items-center h-full w-full">
+                    <div className="flex justify-between w-full max-w-[250px] mb-2 items-center">
+                        <button className="retro-btn text-xs" onClick={() => setData(null)}>Back</button>
+                        <Hints remaining={hints} onUseHint={useHint} />
+                        <span className="text-xs font-bold">Lvl {level}</span>
+                    </div>
                     <div className="grid grid-cols-6 border-2 border-black gap-px bg-black">
                         {grid.map((row, r) => row.map((cell, c) => {
-                            const isLocked = BINARY_DATA.initial[r][c] !== null;
+                            const isLocked = data.initial[r][c] !== null;
                             return (
-                                <div key={`${r}-${c}`} 
-                                     onClick={() => toggleCell(r,c)}
+                                <div key={`${r}-${c}`} onClick={() => toggleCell(r,c)}
                                      className={`w-10 h-10 bg-white flex items-center justify-center cursor-pointer select-none text-2xl
                                         ${isLocked ? 'text-black font-bold' : 'text-blue-600'}
                                      `}>
@@ -528,121 +853,45 @@
                             )
                         }))}
                     </div>
-                    <button className="retro-btn mt-4" onClick={checkWin}>Check</button>
+                    <button className="retro-btn mt-4" onClick={checkWin}>Check Code</button>
                 </div>
             )
         };
 
-        const LogicGridApp = () => {
-            // State is a map "CategoryItem-CategoryItem": value (null, true(O), false(X))
-            // We only need to store the relationship grid.
-            // Simplified: 3 categories.
-            // Grid 1: Cat1 vs Cat2. Grid 2: Cat1 vs Cat3. Grid 3: Cat2 vs Cat3.
-            
-            const [state, setState] = useState({});
-
-            const toggle = (k) => {
-                const curr = state[k];
-                const next = curr === true ? false : (curr === false ? null : true); // Cycle null -> O -> X -> null
-                setState({...state, [k]: next});
-            };
-
-            const check = () => {
-                let errors = 0;
-                Object.keys(LOGIC_DATA.solution).forEach(key => {
-                    const userVal = state[key];
-                    // If user put O (true) where it should be O, good.
-                    // If user put X (false) where it should be X, good.
-                    // If user put nothing, neutral? Or incomplete. Let's strict check only explicit errors.
-                    if (userVal !== undefined && userVal !== null) {
-                        if (userVal !== LOGIC_DATA.solution[key]) errors++;
-                    }
-                });
-                alert(errors === 0 ? "So far so good!" : "Found errors.");
-            };
-
-            // Generate Grid Headers
-            const cats = LOGIC_DATA.categories;
-            const items = LOGIC_DATA.items;
-
-            return (
-                <div className="flex flex-col h-full">
-                    <div className="flex-grow overflow-auto">
-                        <div className="mb-4 p-2 bg-gray-100 border border-black text-sm">
-                            <strong>Clues:</strong>
-                            <ul className="list-none pl-0">
-                                {LOGIC_DATA.clues.map((c,i)=><li key={i}>{c}</li>)}
-                            </ul>
-                        </div>
-                        
-                        <div className="overflow-x-auto">
-                            <table className="border-collapse border border-black mx-auto">
-                                <thead>
-                                    <tr>
-                                        <th className="border border-black p-1 bg-gray-200"></th>
-                                        {items[1].map(i => <th key={i} className="border border-black p-1 vertical-text font-normal text-sm w-8">{i}</th>)}
-                                        {items[2].map(i => <th key={i} className="border border-black p-1 vertical-text font-normal text-sm w-8">{i}</th>)}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {/* Cat 1 rows */}
-                                    {items[0].map((item1, i) => (
-                                        <tr key={item1}>
-                                            <td className="border border-black p-1 text-right text-sm font-bold pr-2">{item1}</td>
-                                            {/* Cat 1 vs Cat 2 */}
-                                            {items[1].map(item2 => {
-                                                const k = `${item1}-${item2}`;
-                                                return (
-                                                    <td key={k} onClick={()=>toggle(k)} className="border border-black w-8 h-8 text-center cursor-pointer hover:bg-gray-200 select-none">
-                                                        {state[k]===true?'O':(state[k]===false?'X':'')}
-                                                    </td>
-                                                )
-                                            })}
-                                            {/* Cat 1 vs Cat 3 */}
-                                            {items[2].map(item3 => {
-                                                const k = `${item1}-${item3}`;
-                                                return (
-                                                    <td key={k} onClick={()=>toggle(k)} className="border border-black w-8 h-8 text-center cursor-pointer hover:bg-gray-200 select-none">
-                                                        {state[k]===true?'O':(state[k]===false?'X':'')}
-                                                    </td>
-                                                )
-                                            })}
-                                        </tr>
-                                    ))}
-                                    {/* Cat 2 vs Cat 3 rows */}
-                                    {items[1].map((item2, i) => (
-                                        <tr key={item2}>
-                                            <td className="border border-black p-1 text-right text-sm font-bold pr-2">{item2}</td>
-                                            {/* Empty spacer for Cat 1 columns */}
-                                            <td colSpan={3} className="bg-black"></td>
-                                            {items[2].map(item3 => {
-                                                const k = `${item2}-${item3}`; // Ensure key consistency? Actually Logic Data implies relationships are transitive. 
-                                                // For this demo, we treat the grid visually. Keys might need sorting alphabetically to be unique if used strictly.
-                                                // But usually standard logic grids just use the pair.
-                                                return (
-                                                    <td key={k} onClick={()=>toggle(k)} className="border border-black w-8 h-8 text-center cursor-pointer hover:bg-gray-200 select-none">
-                                                        {state[k]===true?'O':(state[k]===false?'X':'')}
-                                                    </td>
-                                                )
-                                            })}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <div className="mt-2 text-center">
-                        <button className="retro-btn" onClick={check}>Check Logic</button>
-                    </div>
-                </div>
-            )
-        };
-
-        const KakuroApp = () => {
-             // 3x3 playable grid for demo
-             const map = KAKURO_DATA.map;
+        const KakuroApp = ({ showAlert, onSolve }) => {
+             const [data, setData] = useState(null);
              const [inputs, setInputs] = useState({});
              const [selected, setSelected] = useState(null);
+             const [hints, setHints] = useState(3);
+             const [level, setLevel] = useState(1);
+
+             const newGame = (lvl) => {
+                 setLevel(lvl);
+                 const d = generateKakuroPuzzle(lvl);
+                 setData(d);
+                 let initialInputs = {};
+                 d.map.forEach(c => {
+                     if(c.type === 'i' && c.revealed) initialInputs[`${c.x}-${c.y}`] = c.v;
+                 });
+                 setInputs(initialInputs);
+                 setSelected(null);
+                 setHints(3);
+             };
+
+             const useHint = () => {
+                 if(hints<=0) return;
+                 let candidates = [];
+                 data.map.forEach(c => {
+                     if(c.type === 'i') {
+                         const k = `${c.x}-${c.y}`;
+                         if(inputs[k] !== c.v) candidates.push(c);
+                     }
+                 });
+                 if(candidates.length === 0) return;
+                 const target = candidates[Math.floor(Math.random()*candidates.length)];
+                 setInputs({...inputs, [`${target.x}-${target.y}`]: target.v});
+                 setHints(hints-1);
+             }
 
              const handleInput = (n) => {
                  if (!selected) return;
@@ -650,36 +899,53 @@
              };
 
              const check = () => {
-                 // Hardcoded check for the demo map
-                 // 1,1=1; 1,2=2; 2,1=3; 2,2=1
-                 const ans = {'1-1':1, '2-1':2, '1-2':3, '2-2':1};
                  let correct = true;
-                 Object.keys(ans).forEach(k => {
-                     if (inputs[k] !== ans[k]) correct = false;
+                 data.map.forEach(cell => {
+                     if (cell.type === 'i') {
+                         const key = `${cell.x}-${cell.y}`;
+                         if (inputs[key] !== cell.v) correct = false;
+                     }
                  });
-                 alert(correct ? "Correct!" : "Math doesn't add up.");
+                 if (correct) {
+                     const score = (100 * level) - ((3 - hints) * 20);
+                     showAlert(`Sums Correct! Points: ${score}`, "Well Done");
+                     onSolve('kakuro', score);
+                 } else {
+                     showAlert("Math doesn't match clues.", "Error");
+                 }
              }
 
+             if (!data) return <DifficultySelector onSelect={newGame} />;
+
              return (
-                 <div className="flex flex-col items-center h-full">
-                     <div className="grid grid-cols-3 gap-0 border-2 border-black bg-black">
-                         {[0,1,2].map(y => [0,1,2].map(x => {
-                             const cell = map.find(c => c.x===x && c.y===y);
+                 <div className="flex flex-col items-center h-full w-full">
+                     <div className="flex justify-between w-full max-w-[250px] mb-2 items-center">
+                         <button className="retro-btn text-xs" onClick={() => setData(null)}>Back</button>
+                         <Hints remaining={hints} onUseHint={useHint} />
+                         <span className="text-xs font-bold">Lvl {level}</span>
+                     </div>
+                     <div className={`grid grid-cols-${data.cols} gap-0 border-2 border-black bg-black`}>
+                         {Array(data.rows).fill().map((_, y) => Array(data.cols).fill().map((_, x) => {
+                             const cell = data.map.find(c => c.x===x && c.y===y);
                              const k = `${x}-${y}`;
-                             if (cell.type === 'b') return <div key={k} className="w-12 h-12 bg-black"></div>;
+                             if (!cell) return <div key={k} className="w-14 h-14 bg-black"></div>;
+
+                             if (cell.type === 'b') return <div key={k} className="w-14 h-14 bg-black"></div>;
+                             
                              if (cell.type === 'c') return (
-                                 <div key={k} className="w-12 h-12 bg-black relative border border-white/20">
+                                 <div key={k} className="w-14 h-14 bg-black relative border border-white/20">
                                      <div className="absolute inset-0 border-b border-white transform -rotate-45 origin-bottom-left scale-150"></div>
-                                     {cell.d && <span className="absolute bottom-1 left-1 text-white text-xs z-10">{cell.d}</span>}
-                                     {cell.r && <span className="absolute top-1 right-1 text-white text-xs z-10">{cell.r}</span>}
+                                     {cell.d && <span className="absolute bottom-0.5 left-1 text-white text-sm font-bold z-10">{cell.d}</span>}
+                                     {cell.r && <span className="absolute top-0.5 right-1 text-white text-sm font-bold z-10">{cell.r}</span>}
                                  </div>
                              );
-                             // Input
+                             
+                             const isRevealed = cell.revealed;
                              return (
-                                 <div key={k} 
-                                      onClick={() => setSelected(k)}
-                                      className={`w-12 h-12 bg-white flex items-center justify-center text-xl cursor-pointer
-                                         ${selected===k ? 'bg-blue-200' : ''} border border-gray-400`}
+                                 <div key={k} onClick={() => !isRevealed && setSelected(k)}
+                                      className={`w-14 h-14 bg-white flex items-center justify-center text-2xl cursor-pointer
+                                         ${selected===k ? 'bg-blue-200' : ''} border border-gray-400
+                                         ${isRevealed ? 'bg-gray-200 font-bold' : ''}`}
                                  >
                                      {inputs[k] || ''}
                                  </div>
@@ -692,162 +958,253 @@
              )
         };
 
-        const CryptoApp = () => {
-            const ciphertext = "XQWTPJPM JK ZVP"; // LEARNING IS FUN
-            const [mapping, setMapping] = useState({});
-            const [selectedChar, setSelectedChar] = useState(null);
+        const LogicGridApp = ({ showAlert, onSolve }) => {
+            const [data, setData] = useState(null);
+            const [state, setState] = useState({});
+            const [hints, setHints] = useState(3);
+            const [level, setLevel] = useState(1);
 
-            const alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('');
+            const newGame = (lvl) => {
+                setLevel(lvl);
+                const d = generateLogicPuzzle(lvl);
+                setData(d);
+                setState({});
+                setHints(3);
+            };
 
-            const handleKey = (char) => {
-                if (selectedChar) {
-                    setMapping({...mapping, [selectedChar]: char});
-                    setSelectedChar(null);
+            const toggle = (k) => {
+                const curr = state[k];
+                const next = curr === true ? false : (curr === false ? null : true);
+                setState({...state, [k]: next});
+            };
+
+            const useHint = () => {
+                if(hints <= 0) return;
+                const keys = Object.keys(data.solution);
+                const randomKey = keys[Math.floor(Math.random() * keys.length)];
+                setState({...state, [randomKey]: true});
+                setHints(hints - 1);
+            };
+
+            const check = () => {
+                let errors = 0;
+                let correctCount = 0;
+                let totalTrue = Object.keys(data.solution).length;
+
+                Object.keys(state).forEach(k => {
+                    const userVal = state[k];
+                    const solVal = data.solution[k];
+
+                    if (userVal === true) {
+                        if (!solVal) errors++;
+                        else correctCount++;
+                    } else if (userVal === false) {
+                        if (solVal) errors++;
+                    }
+                });
+
+                if (errors > 0) {
+                    showAlert("Contradiction detected. You have an 'O' where it should be 'X' or vice-versa.", "Logic Error");
+                } else if (correctCount === totalTrue) {
+                    const score = (100 * level) - ((3 - hints) * 20);
+                    showAlert(`Logic Validated! Score: ${score}`, "Deduction Complete");
+                    onSolve('logic', score);
+                } else {
+                    showAlert("So far so good! No contradictions found, but you haven't found all matches yet.", "Status OK");
                 }
             };
 
+            if (!data) return <DifficultySelector onSelect={newGame} />;
+
+            const items = data.items;
             return (
-                <div className="flex flex-col items-center h-full">
-                    <p className="text-center mb-4">Decode the message.</p>
+                <div className="flex flex-col h-full w-full">
+                    <div className="flex justify-between w-full mb-2 items-center">
+                         <button className="retro-btn text-xs" onClick={() => setData(null)}>Back</button>
+                         <Hints remaining={hints} onUseHint={useHint} />
+                         <span className="text-xs font-bold">Lvl {level}</span>
+                    </div>
+                    <div className="flex-grow overflow-auto">
+                        <div className="mb-4 p-2 bg-gray-100 border border-black text-sm">
+                            <strong>Clues:</strong>
+                            <ul className="list-none pl-0">{data.clues.map((c,i)=><li key={i}>{c}</li>)}</ul>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="border-collapse border border-black mx-auto">
+                                <thead>
+                                    <tr>
+                                        <th className="border border-black p-1 bg-gray-200"></th>
+                                        {items[1].map(i => <th key={i} className="border border-black p-1 vertical-text font-normal text-sm w-8">{i}</th>)}
+                                        {items[2].map(i => <th key={i} className="border border-black p-1 vertical-text font-normal text-sm w-8">{i}</th>)}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {items[0].map((item1) => (
+                                        <tr key={item1}>
+                                            <td className="border border-black p-1 text-right text-sm font-bold pr-2">{item1}</td>
+                                            {items[1].map(item2 => { const k=`${item1}-${item2}`; return <td key={k} onClick={()=>toggle(k)} className="border border-black w-8 h-8 text-center cursor-pointer hover:bg-gray-200 select-none">{state[k]===true?'O':(state[k]===false?'X':'')}</td>})}
+                                            {items[2].map(item3 => { const k=`${item1}-${item3}`; return <td key={k} onClick={()=>toggle(k)} className="border border-black w-8 h-8 text-center cursor-pointer hover:bg-gray-200 select-none">{state[k]===true?'O':(state[k]===false?'X':'')}</td>})}
+                                        </tr>
+                                    ))}
+                                    {items[1].map((item2) => (
+                                        <tr key={item2}>
+                                            <td className="border border-black p-1 text-right text-sm font-bold pr-2">{item2}</td>
+                                            <td colSpan={3} className="bg-black"></td>
+                                            {items[2].map(item3 => { const k=`${item2}-${item3}`; return <td key={k} onClick={()=>toggle(k)} className="border border-black w-8 h-8 text-center cursor-pointer hover:bg-gray-200 select-none">{state[k]===true?'O':(state[k]===false?'X':'')}</td>})}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div className="mt-2 text-center"><button className="retro-btn" onClick={check}>Check Logic</button></div>
+                </div>
+            )
+        };
+
+        const CryptoApp = ({ showAlert, onSolve }) => {
+            const [hints, setHints] = useState(3);
+            const [mapping, setMapping] = useState({});
+            const [selectedChar, setSelectedChar] = useState(null);
+            
+            const QUOTE = "LEARNING IS FUN";
+            const CIPHER = {'L':'X', 'E':'Q', 'A':'W', 'R':'T', 'N':'P', 'I':'J', 'G':'M', 'S':'K', 'F':'Z', 'U':'V'};
+            const alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('');
+            
+            const handleKey = (char) => { if (selectedChar) { setMapping({...mapping, [selectedChar]: char}); setSelectedChar(null); } };
+            
+            const useHint = () => {
+                if(hints<=0) return;
+                const keys = Object.keys(CIPHER);
+                let unmapped = keys.filter(k => mapping[CIPHER[k]] !== k);
+                if(unmapped.length === 0) return;
+                const char = unmapped[Math.floor(Math.random()*unmapped.length)];
+                setMapping({...mapping, [CIPHER[char]]: char}); 
+                setHints(hints-1);
+            }
+
+            const check = () => {
+                let correct = true;
+                Object.keys(CIPHER).forEach(real => {
+                    if (mapping[CIPHER[real]] !== real) correct = false;
+                });
+                
+                if (correct) { 
+                    const score = 100 - ((3 - hints) * 20);
+                    showAlert(`Message Decoded: ${QUOTE}. Score: ${score}`, "Decrypted"); 
+                    onSolve('crypto', score); 
+                } 
+                else showAlert("The message is still garbled.", "Encryption Error");
+            }
+
+            return (
+                <div className="flex flex-col items-center h-full w-full">
+                    <div className="flex justify-between w-full max-w-[250px] mb-2 items-center">
+                        <div></div>
+                        <Hints remaining={hints} onUseHint={useHint} />
+                        <div></div>
+                    </div>
                     <div className="flex flex-wrap justify-center gap-2 mb-6">
-                        {ciphertext.split('').map((char, i) => {
+                        {"XQWTPJPM JK ZVP".split('').map((char, i) => {
                             if (char === ' ') return <div key={i} className="w-6"></div>;
                             const decoded = mapping[char] || '';
                             return (
                                 <div key={i} className="flex flex-col items-center cursor-pointer" onClick={() => setSelectedChar(char)}>
-                                    <div className={`w-8 h-8 border-b-2 border-black text-center text-xl ${selectedChar===char ? 'bg-black text-white':''}`}>
-                                        {decoded}
-                                    </div>
+                                    <div className={`w-8 h-8 border-b-2 border-black text-center text-xl ${selectedChar===char ? 'bg-black text-white':''}`}>{decoded}</div>
                                     <div className="text-sm font-bold mt-1">{char}</div>
                                 </div>
                             )
                         })}
                     </div>
-                    
                     <div className="border-t-2 border-black w-full p-2">
-                        <p className="text-sm mb-2 text-center">Select a letter above, then pick its match below:</p>
                         <div className="flex flex-wrap justify-center gap-1">
-                            {alpha.map(l => (
-                                <button key={l} onClick={() => handleKey(l)} className="retro-btn w-8 h-8 p-0 text-lg flex items-center justify-center">
-                                    {l}
-                                </button>
-                            ))}
+                            {alpha.map(l => (<button key={l} onClick={() => handleKey(l)} className="retro-btn w-8 h-8 p-0 text-lg flex items-center justify-center">{l}</button>))}
                         </div>
-                        <button className="retro-btn w-full mt-4" onClick={() => setMapping({})}>Reset</button>
+                        <div className="flex gap-2 justify-center mt-4">
+                             <button className="retro-btn" onClick={() => setMapping({})}>Reset</button>
+                             <button className="retro-btn" onClick={check}>Decode</button>
+                        </div>
                     </div>
                 </div>
             )
         };
 
-        const DropQuoteApp = () => {
-            const phrase = "KEEP CALM";
-            // Columns:
-            // 0: [C, K]
-            // 1: [A, E]
-            // 2: [E, L]
-            // 3: [M, P]
-            // 4: [Space]
-            // Hardcoded columns for simplicity
-            const cols = [
-                {id: 0, chars: ['C','K']},
-                {id: 1, chars: ['A','E']},
-                {id: 2, chars: ['E','L']},
-                {id: 3, chars: ['M','P']}
-            ];
+        const DropQuoteApp = ({ showAlert, onSolve }) => {
+            const [hints, setHints] = useState(3);
+            const [grid, setGrid] = useState([[null, null, null, null], [null, null, null, null]]);
+            const [selectedSource, setSelectedSource] = useState(null);
             
-            const [grid, setGrid] = useState([
-                [null, null, null, null], // KEEP
-                [null, null, null, null]  // CALM
-            ]);
-            
-            const [selectedSource, setSelectedSource] = useState(null); // {colIdx, charIdx, char}
-
-            const handleSourceClick = (cIdx, charIdx, char) => {
-                // If this char is already used, don't pick it
-                // Simple logic: just select text
-                setSelectedSource({cIdx, charIdx, char});
-            };
-
-            const handleDestClick = (row, col) => {
-                if (selectedSource && selectedSource.cIdx === col) {
-                    const newGrid = [...grid];
-                    newGrid[row][col] = selectedSource.char;
-                    setGrid(newGrid);
-                    setSelectedSource(null);
-                }
-            };
-
-            const check = () => {
-                const w1 = grid[0].join('');
-                const w2 = grid[1].join('');
-                if (w1 === 'KEEP' && w2 === 'CALM') alert("Correct!");
-                else alert("Not quite.");
+            const useHint = () => {
+                if(hints > 0) setHints(hints-1);
             }
 
+            const cols = [{id: 0, chars: ['T','F']}, {id: 1, chars: ['I','L']}, {id: 2, chars: ['M','I']}, {id: 3, chars: ['E','E', 'S']}];
+
+            const handleSourceClick = (cIdx, charIdx, char) => { setSelectedSource({cIdx, charIdx, char}); };
+            const handleDestClick = (row, col) => { if (selectedSource && selectedSource.cIdx === col) { const newGrid = [...grid]; newGrid[row][col] = selectedSource.char; setGrid(newGrid); setSelectedSource(null); } };
+            const check = () => {
+                const w1 = grid[0].join(''); const w2 = grid[1].join('');
+                if (w1 === 'KEEP' && w2 === 'CALM') { showAlert("Phrase Completed: KEEP CALM", "Success"); onSolve('drop', 100); }
+                else showAlert("The letters aren't quite right.", "Try Again");
+            }
             return (
-                <div className="flex flex-col items-center h-full">
-                    <p className="mb-4 text-sm">Drop letters into the correct rows.</p>
-                    
-                    {/* Source Letters */}
+                <div className="flex flex-col items-center h-full w-full">
                     <div className="flex gap-2 mb-4">
                         {cols.map((col, cIdx) => (
                             <div key={cIdx} className="flex flex-col gap-1 w-10">
                                 {col.chars.map((char, charIdx) => {
-                                    // Check if used
                                     const used = grid.some(r => r[cIdx] === char);
                                     const isSel = selectedSource?.cIdx === cIdx && selectedSource?.charIdx === charIdx;
-                                    return (
-                                        <div key={charIdx} 
-                                             onClick={() => !used && handleSourceClick(cIdx, charIdx, char)}
-                                             className={`w-10 h-10 border border-black flex items-center justify-center cursor-pointer text-xl
-                                                ${used ? 'opacity-20' : 'bg-white'}
-                                                ${isSel ? 'bg-black text-white' : ''}
-                                             `}>
-                                            {char}
-                                        </div>
-                                    )
+                                    return <div key={charIdx} onClick={() => !used && handleSourceClick(cIdx, charIdx, char)} className={`w-10 h-10 border border-black flex items-center justify-center cursor-pointer text-xl ${used ? 'opacity-20' : 'bg-white'} ${isSel ? 'bg-black text-white' : ''}`}>{char}</div>
                                 })}
                             </div>
                         ))}
                     </div>
-
-                    {/* Destination Grid */}
                     <div className="flex flex-col gap-1 border-t-2 border-black pt-4">
-                         {grid.map((row, rIdx) => (
-                             <div key={rIdx} className="flex gap-2">
-                                 {row.map((cell, cIdx) => (
-                                     <div key={cIdx} 
-                                          onClick={() => handleDestClick(rIdx, cIdx)}
-                                          className="w-10 h-10 border-2 border-black bg-white flex items-center justify-center text-xl cursor-pointer hover:bg-gray-100">
-                                         {cell || ''}
-                                     </div>
-                                 ))}
-                             </div>
-                         ))}
+                         {grid.map((row, rIdx) => (<div key={rIdx} className="flex gap-2">{row.map((cell, cIdx) => (<div key={cIdx} onClick={() => handleDestClick(rIdx, cIdx)} className="w-10 h-10 border-2 border-black bg-white flex items-center justify-center text-xl cursor-pointer hover:bg-gray-100">{cell || ''}</div>))}</div>))}
                     </div>
-
                     <button className="retro-btn mt-6" onClick={check}>Check</button>
                 </div>
             )
         }
 
-        // --- MAIN APP SHELL ---
+        // --- MENU & MAIN APP ---
 
         const App = () => {
             const [activeApp, setActiveApp] = useState(null);
+            const [activeMenu, setActiveMenu] = useState(null);
+            const [alertState, setAlertState] = useState({ isOpen: false, title: '', message: '' });
+            const [scores, setScores] = useState({ sudoku: 0, kenken: 0, binary: 0, logic: 0, kakuro: 0, crypto: 0, drop: 0 });
+            const [showScoreboard, setShowScoreboard] = useState(false);
+            const [showHelp, setShowHelp] = useState(null);
+
+            useEffect(() => { const saved = localStorage.getItem('retroLogicScoresV2'); if (saved) setScores(JSON.parse(saved)); }, []);
+            
+            const updateScore = (gameKey, points) => { 
+                const newScores = { ...scores, [gameKey]: scores[gameKey] + points }; 
+                setScores(newScores); 
+                localStorage.setItem('retroLogicScoresV2', JSON.stringify(newScores)); 
+            };
+            
+            const resetScores = () => { const reset = { sudoku: 0, kenken: 0, binary: 0, logic: 0, kakuro: 0, crypto: 0, drop: 0 }; setScores(reset); localStorage.setItem('retroLogicScoresV2', JSON.stringify(reset)); triggerAlert("All scores have been reset to zero.", "Memory Cleared"); };
+            const triggerAlert = (message, title = "System") => { setAlertState({ isOpen: true, message, title }); };
+            const toggleMenu = (menu) => setActiveMenu(activeMenu === menu ? null : menu);
+            const closeAll = () => { setActiveMenu(null); setActiveApp(null); setShowScoreboard(false); setShowHelp(null); };
+
+            const MenuDropdown = ({ items, style }) => (
+                <div className="absolute top-8 bg-white border-2 border-black shadow-lg z-50 flex flex-col min-w-[150px]" style={style}>
+                    {items.map((item, i) => (<div key={i} className="retro-menu-item" onClick={() => { item.action(); setActiveMenu(null); }}>{item.label}</div>))}
+                </div>
+            );
 
             return (
-                <div className="w-full h-full relative">
-                    
-                    {/* Menu Bar */}
-                    <div className="absolute top-0 w-full h-8 bg-white border-b-2 border-black flex items-center px-2 z-10 shadow-sm">
-                        <div className="font-bold mr-4"></div>
-                        <div className="font-bold mr-4">File</div>
-                        <div className="font-bold mr-4">Edit</div>
-                        <div className="font-bold mr-4">Special</div>
+                <div className="w-full h-full relative" onClick={() => setActiveMenu(null)}>
+                    <div className="absolute top-0 w-full h-8 bg-white border-b-2 border-black flex items-center px-2 z-30 shadow-sm" onClick={e => e.stopPropagation()}>
+                        <div className="font-bold mr-4 select-none"></div>
+                        <div className="relative mr-4"><div className={`font-bold select-none cursor-pointer px-2 ${activeMenu==='file'?'bg-black text-white':''}`} onClick={() => toggleMenu('file')}>File</div>{activeMenu === 'file' && <MenuDropdown items={[{label: 'Close Window', action: () => closeAll()}]} style={{left:0}} />}</div>
+                        <div className="relative mr-4"><div className={`font-bold select-none cursor-pointer px-2 ${activeMenu==='special'?'bg-black text-white':''}`} onClick={() => toggleMenu('special')}>Special</div>{activeMenu === 'special' && <MenuDropdown items={[{label: 'View Scores', action: () => setShowScoreboard(true)},{label: 'Reset Scores', action: resetScores}]} style={{left:0}} />}</div>
+                        <div className="relative mr-4"><div className={`font-bold select-none cursor-pointer px-2 ${activeMenu==='help'?'bg-black text-white':''}`} onClick={() => toggleMenu('help')}>Help</div>{activeMenu === 'help' && <MenuDropdown items={['Sudoku', 'KenKen', 'Binary', 'Logic', 'Kakuro', 'Crypto', 'Drop'].map(k=>({label:`${k} Rules`, action:()=>setShowHelp(k.toLowerCase())}))} style={{left:0}} />}</div>
                     </div>
-
-                    {/* Desktop Icons */}
                     <div className="pt-12 p-4 flex flex-wrap content-start gap-4 h-full">
                         <Icon name="sudoku" label="Sudoku" onClick={() => setActiveApp('sudoku')} />
                         <Icon name="kenken" label="KenKen" onClick={() => setActiveApp('kenken')} />
@@ -857,20 +1214,43 @@
                         <Icon name="crypto" label="Crypto" onClick={() => setActiveApp('crypto')} />
                         <Icon name="drop" label="DropQuote" onClick={() => setActiveApp('drop')} />
                     </div>
-
-                    {/* Active Window */}
-                    {activeApp === 'sudoku' && <Window title="Sudoku" onClose={() => setActiveApp(null)}><SudokuApp /></Window>}
-                    {activeApp === 'kenken' && <Window title="KenKen" onClose={() => setActiveApp(null)}><KenKenApp /></Window>}
-                    {activeApp === 'binary' && <Window title="Binary Puzzle" onClose={() => setActiveApp(null)}><BinaryApp /></Window>}
-                    {activeApp === 'logic' && <Window title="Logic Grid" width="w-full max-w-4xl" onClose={() => setActiveApp(null)}><LogicGridApp /></Window>}
-                    {activeApp === 'kakuro' && <Window title="Kakuro" onClose={() => setActiveApp(null)}><KakuroApp /></Window>}
-                    {activeApp === 'crypto' && <Window title="Cryptography" onClose={() => setActiveApp(null)}><CryptoApp /></Window>}
-                    {activeApp === 'drop' && <Window title="Drop Quote" onClose={() => setActiveApp(null)}><DropQuoteApp /></Window>}
+                    {activeApp === 'sudoku' && <Window title="Sudoku" onClose={() => setActiveApp(null)}><SudokuApp showAlert={triggerAlert} onSolve={updateScore}/></Window>}
+                    {activeApp === 'kenken' && <Window title="KenKen" onClose={() => setActiveApp(null)}><KenKenApp showAlert={triggerAlert} onSolve={updateScore}/></Window>}
+                    {activeApp === 'binary' && <Window title="Binary Puzzle" onClose={() => setActiveApp(null)}><BinaryApp showAlert={triggerAlert} onSolve={updateScore}/></Window>}
+                    {activeApp === 'logic' && <Window title="Logic Grid" width="w-full max-w-4xl" onClose={() => setActiveApp(null)}><LogicGridApp showAlert={triggerAlert} onSolve={updateScore}/></Window>}
+                    {activeApp === 'kakuro' && <Window title="Kakuro" onClose={() => setActiveApp(null)}><KakuroApp showAlert={triggerAlert} onSolve={updateScore}/></Window>}
+                    {activeApp === 'crypto' && <Window title="Cryptography" onClose={() => setActiveApp(null)}><CryptoApp showAlert={triggerAlert} onSolve={updateScore}/></Window>}
+                    {activeApp === 'drop' && <Window title="Drop Quote" onClose={() => setActiveApp(null)}><DropQuoteApp showAlert={triggerAlert} onSolve={updateScore}/></Window>}
+                    {showScoreboard && (<Window title="Class Records" onClose={() => setShowScoreboard(false)} width="w-80"><table className="w-full text-left"><thead><tr className="border-b-2 border-black"><th className="pb-2">Puzzle</th><th className="pb-2 text-right">Score</th></tr></thead><tbody>{Object.keys(scores).map(k => (<tr key={k} className="border-b border-gray-300"><td className="py-2 capitalize">{k}</td><td className="py-2 text-right">{scores[k]}</td></tr>))}</tbody></table></Window>)}
                     
-                    {/* Footer / Copyright */}
-                    <div className="absolute bottom-2 right-2 text-xs bg-white/80 p-1 border border-black">
-                        Classroom Logic OS v1.0
-                    </div>
+                    {/* ENHANCED HELP WINDOW */}
+                    {showHelp && HELP_DATA[showHelp] && (
+                        <Window title={`Help: ${showHelp}`} onClose={() => setShowHelp(null)} width="w-[500px]">
+                            <div className="p-4 w-full">
+                                <h3 className="font-bold text-xl mb-4 border-b-2 border-black capitalize flex items-center gap-2">
+                                    <span className="w-4 h-4 bg-black block"></span>
+                                    {showHelp} Guide
+                                </h3>
+                                
+                                <div className="mb-6">
+                                    <span className="bg-black text-white px-2 py-0.5 text-sm font-bold uppercase tracking-widest mb-2 inline-block">Rules</span>
+                                    <ul className="list-disc pl-5 space-y-1">
+                                        {HELP_DATA[showHelp].rules.map((r,i) => <li key={i} className="text-lg leading-tight">{r}</li>)}
+                                    </ul>
+                                </div>
+
+                                <div>
+                                    <span className="bg-black text-white px-2 py-0.5 text-sm font-bold uppercase tracking-widest mb-2 inline-block">Strategy Tips</span>
+                                    <ul className="list-disc pl-5 space-y-1">
+                                        {HELP_DATA[showHelp].tips.map((t,i) => <li key={i} className="text-lg leading-tight">{t}</li>)}
+                                    </ul>
+                                </div>
+                            </div>
+                        </Window>
+                    )}
+
+                    {alertState.isOpen && (<RetroAlert title={alertState.title} message={alertState.message} onClose={() => setAlertState({...alertState, isOpen: false})} />)}
+                    <div className="absolute bottom-2 right-2 text-xs bg-white/80 p-1 border border-black pointer-events-none">Classroom Logic OS v5.0</div>
                 </div>
             );
         };
@@ -880,4 +1260,3 @@
     </script>
 </body>
 </html>
-
