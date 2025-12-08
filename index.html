@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Logic Puzzles OS v5.0</title>
+    <title>Logic Puzzles OS v6.1</title>
     
     <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -127,14 +127,48 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback } = React;
 
+        // ==========================================
+        // *** TEACHER CONFIG: PHRASE POOLS ***
+        // ==========================================
+        
+        const CRYPTO_PHRASES = [
+            "KNOWLEDGE IS POWER",
+            "PRACTICE MAKES PERFECT",
+            "ACTIONS SPEAK LOUDER THAN WORDS",
+            "BETTER LATE THAN NEVER",
+            "THE EARLY BIRD CATCHES THE WORM",
+            "EVERY CLOUD HAS A SILVER LINING",
+            "HONESTY IS THE BEST POLICY",
+            "A PENNY SAVED IS A PENNY EARNED",
+            "WHERE THERE IS A WILL THERE IS A WAY",
+            "TIME FLIES WHEN YOU ARE HAVING FUN",
+            "LOOK BEFORE YOU LEAP",
+            "TWO HEADS ARE BETTER THAN ONE"
+        ];
+
+        const DROP_PHRASES = [
+            "NO PAIN NO GAIN",
+            "KEEP CALM AND CARRY ON",
+            "STAY HUNGRY STAY FOOLISH",
+            "SEIZE THE DAY",
+            "BELIEVE YOU CAN AND YOU ARE HALFWAY THERE",
+            "DO WHAT YOU CAN WITH WHAT YOU HAVE",
+            "DREAM BIG AND DARE TO FAIL",
+            "BE THE CHANGE YOU WISH TO SEE",
+            "TURN YOUR WOUNDS INTO WISDOM",
+            "LIFE IS WHAT HAPPENS WHEN YOU ARE BUSY",
+            "HAPPINESS DEPENDS UPON OURSELVES",
+            "THE JOURNEY OF A THOUSAND MILES BEGINS WITH ONE STEP"
+        ];
+
         // --- HELP DATA ---
         const HELP_DATA = {
             sudoku: {
                 rules: [
-                    "Fill the 6x6 grid with numbers 1-6.",
-                    "Each row must contain numbers 1-6 exactly once.",
-                    "Each column must contain numbers 1-6 exactly once.",
-                    "Each 2x3 bold box must contain numbers 1-6 exactly once."
+                    "Fill the 9x9 grid with numbers 1-9.",
+                    "Each row must contain numbers 1-9 exactly once.",
+                    "Each column must contain numbers 1-9 exactly once.",
+                    "Each 3x3 bold box must contain numbers 1-9 exactly once."
                 ],
                 tips: [
                     "Start by looking for rows, columns, or boxes that are almost full.",
@@ -229,10 +263,10 @@
 
         // --- GENERATORS ---
 
-        // 1. SUDOKU (6x6)
+        // 1. SUDOKU (9x9)
         const generateSudokuPuzzle = (level) => {
-            const size = 6;
-            const boxH = 2, boxW = 3;
+            const size = 9;
+            const boxH = 3, boxW = 3;
             let board = Array(size).fill().map(() => Array(size).fill(0));
 
             const isValid = (bd, r, c, num) => {
@@ -249,7 +283,7 @@
                 for (let r = 0; r < size; r++) {
                     for (let c = 0; c < size; c++) {
                         if (bd[r][c] === 0) {
-                            const nums = shuffle([1, 2, 3, 4, 5, 6]);
+                            const nums = shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9]);
                             for (let num of nums) {
                                 if (isValid(bd, r, c, num)) {
                                     bd[r][c] = num;
@@ -267,10 +301,23 @@
             solve(board);
             const solution = board.map(row => [...row]);
 
-            const holes = 10 + ((level - 1) * 3);
+            // Difficulty -> Holes for 9x9
+            // L1: 20 + 7 = 27 holes (64 filled) -> Easy
+            // L5: 20 + 35 = 55 holes (26 filled) -> Hard
+            const holes = 20 + (level * 7); 
+            
+            // Generate list of all possible coordinates
+            let coords = [];
+            for (let r = 0; r < size; r++) {
+                for (let c = 0; c < size; c++) {
+                    coords.push([r, c]);
+                }
+            }
+            coords = shuffle(coords);
+
+            // Remove exactly 'holes' amount
             for (let i = 0; i < holes; i++) {
-                let r = Math.floor(Math.random() * size);
-                let c = Math.floor(Math.random() * size);
+                const [r, c] = coords[i];
                 board[r][c] = 0;
             }
             return { initial: board, solution };
@@ -513,6 +560,69 @@
             };
         };
 
+        // 6. CRYPTO PHRASE GENERATOR
+        const generateCryptoPuzzle = (level) => {
+            const phrase = CRYPTO_PHRASES[Math.floor(Math.random() * CRYPTO_PHRASES.length)];
+            const alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('');
+            const shuffled = shuffle([...alpha]);
+            
+            // Generate Cipher Mapping
+            let cipher = {};
+            let reverseCipher = {};
+            alpha.forEach((char, i) => {
+                cipher[char] = shuffled[i]; // Real -> Cipher
+                reverseCipher[shuffled[i]] = char; // Cipher -> Real
+            });
+
+            return {
+                quote: phrase,
+                cipher: cipher, // The solution map (Real -> Encoded)
+                reverse: reverseCipher // Encoded -> Real
+            };
+        };
+
+        // 7. DROP QUOTE GENERATOR
+        const generateDropPuzzle = (level) => {
+            const phrase = DROP_PHRASES[Math.floor(Math.random() * DROP_PHRASES.length)];
+            
+            // Calculate grid dimensions
+            // Try to make roughly square or manageable width
+            let width = Math.min(phrase.length, 14); // Max width 14
+            // Ensure width splits words decently? No, Drop quotes just wrap.
+            // Split into rows
+            let rows = [];
+            for (let i = 0; i < phrase.length; i += width) {
+                rows.push(phrase.slice(i, i + width).split(''));
+            }
+            // Pad last row
+            while (rows[rows.length-1].length < width) {
+                rows[rows.length-1].push(null); // Blocked out
+            }
+
+            const grid = rows; // The Solution Grid
+            
+            // Generate source columns
+            let cols = [];
+            for (let c = 0; c < width; c++) {
+                let chars = [];
+                for (let r = 0; r < rows.length; r++) {
+                    const char = rows[r][c];
+                    if (char && char !== ' ' && char !== null) chars.push(char);
+                }
+                chars.sort(); // Drop quote columns are sorted alphabetically usually, or just scrambled? 
+                // Usually sorted A-Z in drop quotes so you don't know the order.
+                cols.push({ id: c, chars: chars });
+            }
+
+            return {
+                phrase,
+                grid,
+                cols,
+                width,
+                height: rows.length
+            };
+        };
+
 
         // --- COMPONENTS ---
 
@@ -628,7 +738,7 @@
             const useHint = () => {
                 if (hints <= 0) return;
                 let empty = [];
-                for(let r=0; r<6; r++) for(let c=0; c<6; c++) if(grid[r][c] === 0) empty.push([r,c]);
+                for(let r=0; r<9; r++) for(let c=0; c<9; c++) if(grid[r][c] === 0) empty.push([r,c]);
                 if(empty.length === 0) return;
                 
                 const [r, c] = empty[Math.floor(Math.random() * empty.length)];
@@ -648,7 +758,7 @@
 
             const checkWin = () => {
                 let valid = true;
-                for(let r=0; r<6; r++) for(let c=0; c<6; c++) if (grid[r][c] !== data.solution[r][c]) valid = false;
+                for(let r=0; r<9; r++) for(let c=0; c<9; c++) if (grid[r][c] !== data.solution[r][c]) valid = false;
                 if (valid) {
                     const score = (100 * level) - ((3 - hints) * 20);
                     showAlert(`Correct! Level ${level} Solved. Points: ${score}`, "Success");
@@ -662,20 +772,21 @@
 
             return (
                 <div className="flex flex-col items-center h-full w-full">
-                    <div className="flex justify-between w-full max-w-[300px] mb-2 items-center">
+                    <div className="flex justify-between w-full max-w-[400px] mb-2 items-center">
                         <button className="retro-btn text-xs" onClick={() => setData(null)}>Back</button>
                         <Hints remaining={hints} onUseHint={useHint} />
                         <span className="text-xs font-bold">Lvl {level}</span>
                     </div>
-                    <div className="grid grid-cols-6 gap-0 border-2 border-black mb-4 select-none">
+                    <div className="grid grid-cols-9 gap-0 border-2 border-black mb-4 select-none">
                         {grid.map((row, r) => row.map((cell, c) => {
                             const isLocked = data.initial[r][c] !== 0;
                             const isSelected = selected[0] === r && selected[1] === c;
-                            const borderR = (c+1)%3 === 0 && c!==5 ? "border-r-2 border-black" : "border-r border-gray-400";
-                            const borderB = (r+1)%2 === 0 && r!==5 ? "border-b-2 border-black" : "border-b border-gray-400";
+                            // 9x9 Borders (every 3rd col/row)
+                            const borderR = (c+1)%3 === 0 && c!==8 ? "border-r-2 border-black" : "border-r border-gray-400";
+                            const borderB = (r+1)%3 === 0 && r!==8 ? "border-b-2 border-black" : "border-b border-gray-400";
                             return (
                                 <div key={`${r}-${c}`} onClick={() => setSelected([r,c])}
-                                     className={`w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center cursor-pointer text-xl
+                                     className={`w-8 h-8 md:w-9 md:h-9 flex items-center justify-center cursor-pointer text-lg md:text-xl
                                          ${borderR} ${borderB}
                                          ${isSelected ? 'bg-black text-white' : (isLocked ? 'bg-gray-200 font-bold' : 'bg-white')}
                                      `}>
@@ -1063,50 +1174,74 @@
         };
 
         const CryptoApp = ({ showAlert, onSolve }) => {
+            const [data, setData] = useState(null);
             const [hints, setHints] = useState(3);
             const [mapping, setMapping] = useState({});
             const [selectedChar, setSelectedChar] = useState(null);
-            
-            const QUOTE = "LEARNING IS FUN";
-            const CIPHER = {'L':'X', 'E':'Q', 'A':'W', 'R':'T', 'N':'P', 'I':'J', 'G':'M', 'S':'K', 'F':'Z', 'U':'V'};
             const alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('');
-            
+            const [level, setLevel] = useState(1);
+
+            const newGame = (lvl) => {
+                setLevel(lvl);
+                const d = generateCryptoPuzzle(lvl);
+                setData(d);
+                setMapping({});
+                setHints(3);
+                setSelectedChar(null);
+            };
+
             const handleKey = (char) => { if (selectedChar) { setMapping({...mapping, [selectedChar]: char}); setSelectedChar(null); } };
             
             const useHint = () => {
                 if(hints<=0) return;
-                const keys = Object.keys(CIPHER);
-                let unmapped = keys.filter(k => mapping[CIPHER[k]] !== k);
+                // Reveal one correct mapping
+                // data.cipher maps REAL -> ENCODED
+                // We want to find a Real letter that hasn't been mapped correctly in user's mapping yet.
+                const realChars = Object.keys(data.cipher);
+                // Find chars where mapping[encoded] != real
+                let unmapped = realChars.filter(real => mapping[data.cipher[real]] !== real);
+                
                 if(unmapped.length === 0) return;
-                const char = unmapped[Math.floor(Math.random()*unmapped.length)];
-                setMapping({...mapping, [CIPHER[char]]: char}); 
+                const char = unmapped[Math.floor(Math.random()*unmapped.length)]; // Real char
+                setMapping({...mapping, [data.cipher[char]]: char}); 
                 setHints(hints-1);
             }
 
             const check = () => {
                 let correct = true;
-                Object.keys(CIPHER).forEach(real => {
-                    if (mapping[CIPHER[real]] !== real) correct = false;
+                Object.keys(data.cipher).forEach(real => {
+                    // cipher[real] is the encoded char
+                    // mapping[encoded] should be real
+                    if (mapping[data.cipher[real]] !== real) correct = false;
                 });
                 
                 if (correct) { 
                     const score = 100 - ((3 - hints) * 20);
-                    showAlert(`Message Decoded: ${QUOTE}. Score: ${score}`, "Decrypted"); 
+                    showAlert(`Message Decoded: ${data.quote}. Score: ${score}`, "Decrypted"); 
                     onSolve('crypto', score); 
                 } 
                 else showAlert("The message is still garbled.", "Encryption Error");
             }
 
+            if (!data) return <DifficultySelector onSelect={newGame} />;
+
+            // The Cipher Text
+            const cipherText = data.quote.split('').map(c => {
+                if (/[A-Z]/.test(c)) return data.cipher[c];
+                return c;
+            }).join('');
+
             return (
                 <div className="flex flex-col items-center h-full w-full">
                     <div className="flex justify-between w-full max-w-[250px] mb-2 items-center">
-                        <div></div>
+                        <button className="retro-btn text-xs" onClick={() => setData(null)}>Back</button>
                         <Hints remaining={hints} onUseHint={useHint} />
                         <div></div>
                     </div>
                     <div className="flex flex-wrap justify-center gap-2 mb-6">
-                        {"XQWTPJPM JK ZVP".split('').map((char, i) => {
+                        {cipherText.split('').map((char, i) => {
                             if (char === ' ') return <div key={i} className="w-6"></div>;
+                            if (!/[A-Z]/.test(char)) return <div key={i} className="w-4 text-center mt-6 font-bold">{char}</div>;
                             const decoded = mapping[char] || '';
                             return (
                                 <div key={i} className="flex flex-col items-center cursor-pointer" onClick={() => setSelectedChar(char)}>
@@ -1130,38 +1265,120 @@
         };
 
         const DropQuoteApp = ({ showAlert, onSolve }) => {
+            const [data, setData] = useState(null);
             const [hints, setHints] = useState(3);
-            const [grid, setGrid] = useState([[null, null, null, null], [null, null, null, null]]);
+            const [grid, setGrid] = useState([]);
             const [selectedSource, setSelectedSource] = useState(null);
+            const [level, setLevel] = useState(1);
             
-            const useHint = () => {
-                if(hints > 0) setHints(hints-1);
-            }
+            const newGame = (lvl) => {
+                setLevel(lvl);
+                const d = generateDropPuzzle(lvl);
+                setData(d);
+                // Create empty user grid
+                setGrid(Array(d.height).fill().map(() => Array(d.width).fill(null)));
+                setSelectedSource(null);
+                setHints(3);
+            };
 
-            const cols = [{id: 0, chars: ['T','F']}, {id: 1, chars: ['I','L']}, {id: 2, chars: ['M','I']}, {id: 3, chars: ['E','E', 'S']}];
+            const useHint = () => {
+                if(hints <= 0) return;
+                // Find an empty cell in user grid that corresponds to a valid letter in solution
+                let empty = [];
+                for(let r=0; r<data.height; r++) {
+                    for(let c=0; c<data.width; c++) {
+                        // If user cell is empty AND solution has a letter (not null/space)
+                        if (!grid[r][c] && data.grid[r][c] && data.grid[r][c] !== ' ') {
+                            empty.push({r,c});
+                        }
+                    }
+                }
+                if(empty.length === 0) return;
+                const pick = empty[Math.floor(Math.random()*empty.length)];
+                
+                const newGrid = [...grid];
+                newGrid[pick.r][pick.c] = data.grid[pick.r][pick.c];
+                setGrid(newGrid);
+                setHints(hints - 1);
+            }
 
             const handleSourceClick = (cIdx, charIdx, char) => { setSelectedSource({cIdx, charIdx, char}); };
-            const handleDestClick = (row, col) => { if (selectedSource && selectedSource.cIdx === col) { const newGrid = [...grid]; newGrid[row][col] = selectedSource.char; setGrid(newGrid); setSelectedSource(null); } };
+            
+            const handleDestClick = (row, col) => { 
+                if (selectedSource && selectedSource.cIdx === col) { 
+                    const newGrid = [...grid]; 
+                    newGrid[row][col] = selectedSource.char; 
+                    setGrid(newGrid); 
+                    setSelectedSource(null); 
+                } 
+            };
+            
             const check = () => {
-                const w1 = grid[0].join(''); const w2 = grid[1].join('');
-                if (w1 === 'KEEP' && w2 === 'CALM') { showAlert("Phrase Completed: KEEP CALM", "Success"); onSolve('drop', 100); }
+                // Flatten user grid and compare to phrase
+                // Note: data.grid has the structure.
+                let correct = true;
+                for(let r=0; r<data.height; r++) {
+                    for(let c=0; c<data.width; c++) {
+                        const sol = data.grid[r][c];
+                        if (sol && sol !== ' ' && sol !== null) {
+                            if (grid[r][c] !== sol) correct = false;
+                        }
+                    }
+                }
+                
+                if (correct) { showAlert(`Phrase Completed: ${data.phrase}`, "Success"); onSolve('drop', 100); }
                 else showAlert("The letters aren't quite right.", "Try Again");
             }
+
+            if (!data) return <DifficultySelector onSelect={newGame} />;
+
             return (
                 <div className="flex flex-col items-center h-full w-full">
-                    <div className="flex gap-2 mb-4">
-                        {cols.map((col, cIdx) => (
-                            <div key={cIdx} className="flex flex-col gap-1 w-10">
+                    <div className="flex justify-between w-full max-w-[250px] mb-2 items-center">
+                        <button className="retro-btn text-xs" onClick={() => setData(null)}>Back</button>
+                        <Hints remaining={hints} onUseHint={useHint} />
+                        <div></div>
+                    </div>
+                    
+                    {/* Source Letters */}
+                    <div className="flex gap-1 mb-4">
+                        {data.cols.map((col, cIdx) => (
+                            <div key={cIdx} className="flex flex-col gap-1 w-6 sm:w-8">
                                 {col.chars.map((char, charIdx) => {
-                                    const used = grid.some(r => r[cIdx] === char);
+                                    // Check if this instance of char in this column is used
+                                    // Count occurrences in user grid for this column
+                                    // Simple logic: if user grid has N 'A's in col 0, and source has M 'A's, dim the first N 'A's in source?
+                                    // Better: Just check if user grid count >= source index + 1 for that char?
+                                    // Simplest: Just let them click. Visual feedback is tricky without unique IDs for every letter instance.
+                                    // We will just allow clicking always.
+                                    
                                     const isSel = selectedSource?.cIdx === cIdx && selectedSource?.charIdx === charIdx;
-                                    return <div key={charIdx} onClick={() => !used && handleSourceClick(cIdx, charIdx, char)} className={`w-10 h-10 border border-black flex items-center justify-center cursor-pointer text-xl ${used ? 'opacity-20' : 'bg-white'} ${isSel ? 'bg-black text-white' : ''}`}>{char}</div>
+                                    return <div key={charIdx} onClick={() => handleSourceClick(cIdx, charIdx, char)} className={`w-6 h-6 sm:w-8 sm:h-8 border border-black flex items-center justify-center cursor-pointer text-lg bg-white ${isSel ? 'bg-black text-white' : ''}`}>{char}</div>
                                 })}
                             </div>
                         ))}
                     </div>
+                    
+                    {/* Grid */}
                     <div className="flex flex-col gap-1 border-t-2 border-black pt-4">
-                         {grid.map((row, rIdx) => (<div key={rIdx} className="flex gap-2">{row.map((cell, cIdx) => (<div key={cIdx} onClick={() => handleDestClick(rIdx, cIdx)} className="w-10 h-10 border-2 border-black bg-white flex items-center justify-center text-xl cursor-pointer hover:bg-gray-100">{cell || ''}</div>))}</div>))}
+                         {grid.map((row, rIdx) => (
+                             <div key={rIdx} className="flex gap-1">
+                                 {row.map((cell, cIdx) => {
+                                     // Check if this cell is valid in solution (not null/blocked)
+                                     const isValidCell = data.grid[rIdx][cIdx] !== null;
+                                     const isSpace = data.grid[rIdx][cIdx] === ' ';
+                                     
+                                     if (!isValidCell) return <div key={cIdx} className="w-6 h-6 sm:w-8 sm:h-8 bg-black"></div>;
+                                     if (isSpace) return <div key={cIdx} className="w-6 h-6 sm:w-8 sm:h-8 bg-gray-300"></div>;
+
+                                     return (
+                                        <div key={cIdx} onClick={() => handleDestClick(rIdx, cIdx)} className="w-6 h-6 sm:w-8 sm:h-8 border-2 border-black bg-white flex items-center justify-center text-lg cursor-pointer hover:bg-gray-100">
+                                            {cell || ''}
+                                        </div>
+                                     );
+                                 })}
+                             </div>
+                         ))}
                     </div>
                     <button className="retro-btn mt-6" onClick={check}>Check</button>
                 </div>
@@ -1250,7 +1467,7 @@
                     )}
 
                     {alertState.isOpen && (<RetroAlert title={alertState.title} message={alertState.message} onClose={() => setAlertState({...alertState, isOpen: false})} />)}
-                    <div className="absolute bottom-2 right-2 text-xs bg-white/80 p-1 border border-black pointer-events-none">Classroom Logic OS v5.0</div>
+                    <div className="absolute bottom-2 right-2 text-xs bg-white/80 p-1 border border-black pointer-events-none">Classroom Logic OS v6.0</div>
                 </div>
             );
         };
